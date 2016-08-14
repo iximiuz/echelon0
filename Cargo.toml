@@ -1,0 +1,7 @@
+[package]
+name = "echelon0"
+version = "0.1.0"
+authors = ["Ivan Velichko <iximiuz@gmail.com>"]
+
+[dependencies]
+getopts = "0.2"
