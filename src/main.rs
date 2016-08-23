@@ -1,10 +1,15 @@
 use std::env;
 use std::process;
+use std::fs::File;
 
 extern crate getopts;
 use getopts::Options;
 
-mod reader;
+extern crate glob;
+use self::glob::glob;
+
+
+mod input;
 
 
 fn print_usage(opts: &Options, program: &String) {
@@ -42,5 +47,12 @@ fn main() {
         return;
     }
 
-    let r = reader::Reader {};
+    // let stdin = io::stdin();
+    // let sources = vec![stdin.lock()];
+    // let i = input::Input::new(sources);
+
+    let f1 = File::open("a.txt").expect("Where is a file?");
+    let f2 = File::open("b.txt").expect("Where is b file?");
+    let files = vec![f1, f2].into_iter();
+    let files_input = input::Input::files::<std::vec::IntoIter<File>>(files);
 }
