@@ -1,6 +1,7 @@
 use std::env;
 use std::process;
 use std::fs::File;
+use std::io::BufReader;
 
 extern crate getopts;
 use getopts::Options;
@@ -54,5 +55,5 @@ fn main() {
     let f1 = File::open("a.txt").expect("Where is a file?");
     let f2 = File::open("b.txt").expect("Where is b file?");
     let files = vec![f1, f2].into_iter();
-    let files_input = input::Input::files::<std::vec::IntoIter<File>>(files);
+    let files_input = input::Input::files(files);
 }

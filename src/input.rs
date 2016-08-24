@@ -1,25 +1,27 @@
 use std::io;
-use std::io::{BufReader, Read, Stdin};
+use std::io::{Read, BufRead, BufReader, Stdin};
 use std::fs::File;
 
 
 pub struct Input<R> {
-    source: BufReader<R>,
+    source: R,
 }
 
-impl<R: Read> Input<R> {
-    pub fn stdin<'a>(stdin: &'a Stdin) -> Input<Stdin> {
-        Input { source: stdin.lock() }
-    }
-
-    pub fn files<I: Iterator<Item = File>>(files: I) -> Input<ChainedReader<File, I>> {
-        Input { source: BufReader::new(ChainedReader::new(files)) }
-    }
+impl<R: BufRead> Input<R> {
+    // pub fn stdin<'a>(stdin: &'a Stdin) -> Input<Stdin> {
+    //    Input { source: stdin.lock() }
+    // }
 
     // pub fn read_chunk(&mut self, u8, buf: &mut Vec<u8>) -> Result<(), String> {
     // let f = File::open("input.txt").expect("File not found");
     //    Ok(())
     // }
+}
+
+impl<I: Iterator<Item = File>> Input<ChainedReader<File, I>> {
+    pub fn files(files: I) -> Input<BufReader<ChainedReader<File, I>>> {
+        Input { source: BufReader::new(ChainedReader::new(files)) }
+    }
 }
 
 pub struct ChainedReader<R, I> {
