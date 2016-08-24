@@ -1,4 +1,5 @@
 use std::env;
+use std::io;
 use std::process;
 use std::fs::File;
 use std::io::BufReader;
@@ -48,12 +49,11 @@ fn main() {
         return;
     }
 
-    // let stdin = io::stdin();
-    // let sources = vec![stdin.lock()];
-    // let i = input::Input::new(sources);
-
     let f1 = File::open("a.txt").expect("Where is a file?");
     let f2 = File::open("b.txt").expect("Where is b file?");
     let files = vec![f1, f2].into_iter();
     let files_input = input::Input::files(files);
+
+    let stdin = io::stdin();
+    let stdin_input = input::Input::stdin(&stdin);
 }

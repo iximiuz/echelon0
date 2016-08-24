@@ -2,56 +2,28 @@ use std::io;
 use std::io::{Read, BufRead, BufReader, Stdin};
 use std::fs::File;
 
+extern crate multi_reader;
+
 
 pub struct Input<R> {
     source: R,
 }
 
 impl<R: BufRead> Input<R> {
-    // pub fn stdin<'a>(stdin: &'a Stdin) -> Input<Stdin> {
-    //    Input { source: stdin.lock() }
-    // }
-
     // pub fn read_chunk(&mut self, u8, buf: &mut Vec<u8>) -> Result<(), String> {
     // let f = File::open("input.txt").expect("File not found");
     //    Ok(())
     // }
 }
 
-impl<I: Iterator<Item = File>> Input<ChainedReader<File, I>> {
-    pub fn files(files: I) -> Input<BufReader<ChainedReader<File, I>>> {
-        Input { source: BufReader::new(ChainedReader::new(files)) }
+impl<I: Iterator<Item = File>> Input<multi_reader::MultiReader<File, I>> {
+    pub fn files(files: I) -> Input<BufReader<multi_reader::MultiReader<File, I>>> {
+        Input { source: BufReader::new(multi_reader::MultiReader::new(files)) }
     }
 }
 
-pub struct ChainedReader<R, I> {
-    readers: I,
-    current: Option<R>,
-}
-
-impl<R: Read, I: Iterator<Item = R>> ChainedReader<R, I> {
-    pub fn new(mut readers: I) -> ChainedReader<R, I> {
-        let current = readers.next();
-        ChainedReader {
-            readers: readers,
-            current: current,
-        }
-    }
-}
-
-impl<R: Read, I: Iterator<Item = R>> Read for ChainedReader<R, I> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        loop {
-            match self.current {
-                Some(ref mut r) => {
-                    let n = try!(r.read(buf));
-                    if n > 0 {
-                        return Ok(n);
-                    }
-                }
-                None => return Ok(0),
-            }
-            self.current = self.readers.next();
-        }
+impl<'a> Input<io::StdinLock<'a>> {
+    pub fn stdin(stdin: &'a Stdin) -> Input<io::StdinLock<'a>> {
+        Input { source: stdin.lock() }
     }
 }

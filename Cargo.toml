@@ -6,3 +6,5 @@ authors = ["Ivan Velichko <iximiuz@gmail.com>"]
 [dependencies]
 getopts = "0.2"
 glob = "0.2.11"
+multi_reader = "0.1.0"
+
