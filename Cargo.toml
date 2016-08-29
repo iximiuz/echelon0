@@ -5,6 +5,8 @@ authors = ["Ivan Velichko <iximiuz@gmail.com>"]
 
 [dependencies]
 getopts = "0.2"
-glob = "0.2.11"
-multi_reader = "0.1.0"
 
+[dependencies.monstrio]
+version = "0.1"
+features = ["glob"]
+path = "../../crates.rs/monstrio"

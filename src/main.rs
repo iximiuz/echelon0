@@ -1,17 +1,12 @@
 use std::env;
 use std::io;
+use std::io::BufRead;
 use std::process;
-use std::fs::File;
-use std::io::BufReader;
 
 extern crate getopts;
 use getopts::Options;
 
-extern crate glob;
-use self::glob::glob;
-
-
-mod input;
+extern crate monstrio;
 
 
 fn print_usage(opts: &Options, program: &String) {
@@ -49,11 +44,15 @@ fn main() {
         return;
     }
 
-    let f1 = File::open("a.txt").expect("Where is a file?");
-    let f2 = File::open("b.txt").expect("Where is b file?");
-    let files = vec![f1, f2].into_iter();
-    let files_input = input::Input::files(files);
+    // let stdin = io::stdin();
+    // let stdin_input = monstrio::Input::stdin(&stdin);
 
-    let stdin = io::stdin();
-    let stdin_input = input::Input::stdin(&stdin);
+    let mut glob_input = monstrio::Input::glob(args.free.into_iter());
+    let reader = glob_input.as_mut();
+
+    loop {
+        let mut line = String::new();
+        reader.read_line(&mut line);
+        println!("{}", line);
+    }
 }
