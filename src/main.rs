@@ -1,12 +1,15 @@
 use std::env;
-use std::io;
 use std::io::BufRead;
 use std::process;
 
-extern crate getopts;
 use getopts::Options;
 
+extern crate env_logger;
+extern crate getopts;
+
 extern crate monstrio;
+
+mod parser;
 
 
 fn print_usage(opts: &Options, program: &String) {
@@ -21,6 +24,8 @@ fn handle_bad_opts(err: &String, program: &String) {
 }
 
 fn main() {
+    env_logger::init().expect("Cannot initialize logger");
+
     let args: Vec<_> = env::args().collect();
     let program = args[0].clone();
 
@@ -52,7 +57,25 @@ fn main() {
 
     loop {
         let mut line = String::new();
-        reader.read_line(&mut line);
-        println!("{}", line);
+        match reader.read_line(&mut line) {
+            Ok(n) => {
+                if n == 0 {
+                    break;
+                }
+            }
+            Err(err) => {
+                println!("{:?}", err);
+                break;
+            }
+        }
+
+        match parser.parse_chunk(&line) {
+            Ok(chunk) => {
+                println!("{:?}", chunk);
+            }
+            Err(err) => {
+                println!("{:?}", err);
+            }
+        }
     }
 }
