@@ -54,6 +54,7 @@ fn main() {
 
     let mut glob_input = monstrio::Input::glob(args.free.into_iter());
     let reader = glob_input.as_mut();
+    let parser = parser::Parser::new();
 
     loop {
         let mut line = String::new();
@@ -69,9 +70,9 @@ fn main() {
             }
         }
 
-        match parser.parse_chunk(&line) {
-            Ok(chunk) => {
-                println!("{:?}", chunk);
+        match parser.parse_entry(&line) {
+            Ok(entry) => {
+                println!("{:?}", entry);
             }
             Err(err) => {
                 println!("{:?}", err);
