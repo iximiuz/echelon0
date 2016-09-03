@@ -54,7 +54,13 @@ fn main() {
 
     let mut glob_input = monstrio::Input::glob(args.free.into_iter());
     let reader = glob_input.as_mut();
-    let parser = parser::Parser::new();
+    let parser = match parser::Parser::new("/\\d+\\s\\w/ time,word") {
+        Ok(p) => p,
+        Err(e) => {
+            println!("Cannot create parser!");
+            return;
+        }
+    };
 
     loop {
         let mut line = String::new();
