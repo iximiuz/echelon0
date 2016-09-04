@@ -102,7 +102,6 @@ enum Token<'a> {
     Comma,
     WS, // White spaces
     EOF,
-    Illegal,
 }
 
 type ScannedToken<'a> = (Token<'a>, usize);
@@ -123,45 +122,41 @@ impl<'a> RuleScanner<'a> {
             None => return Ok((Token::EOF, self.reader.pos)), 
         };
 
-        let scanned = match ch0 {
-            '/' => self.scan_regex(),
-            ' ' | '\t' => self.scan_whitespace(),
-            ':' => self.scan_field_type(),
-            ',' => Ok(Token::Comma),
+        let token = match ch0 {
+            '/' => try!(self.scan_regex()),
+            ' ' | '\t' => try!(self.scan_whitespace()),
+            ':' => try!(self.scan_field_type()),
+            ',' => Token::Comma,
             _ => {
-                if self.is_ident_first_symbol(ch0) {
-                    self.reader.unread();
-                    self.scan_field_name()
-                } else {
-                    Ok(Token::Illegal)
+                if !self.is_ident_first_symbol(ch0) {
+                    return Err("Illegal token at pos %d".to_string());
                 }
+                self.reader.unread();
+                try!(self.scan_field_name())
             }
         };
 
-        match scanned {
-            Ok(token) => Ok((token, pos)),
-            Err(err) => Err(err),
-        }
+        Ok((token, pos))
     }
 
     fn scan_field_name(&mut self) -> Result<Token<'a>, String> {
-        Ok(Token::Illegal)
+        Ok(Token::EOF)
     }
 
     fn scan_field_type(&mut self) -> Result<Token<'a>, String> {
-        Ok(Token::Illegal)
+        Ok(Token::EOF)
     }
 
     fn scan_regex(&mut self) -> Result<Token<'a>, String> {
-        Ok(Token::Illegal)
+        Ok(Token::EOF)
     }
 
     fn scan_whitespace(&mut self) -> Result<Token<'a>, String> {
-        Ok(Token::Illegal)
+        Ok(Token::EOF)
     }
 
     fn is_ident_first_symbol(&self, ch0: char) -> bool {
-        false
+        (ch0 == '_') || ('a' <= ch0 && ch0 <= 'z') || ('A' <= ch0 && ch0 <= 'Z')
     }
 }
 
