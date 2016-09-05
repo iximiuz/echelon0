@@ -88,11 +88,15 @@ impl<'a> RuleStrReader<'a> {
         if self.buffered {
             panic!("Cannot unread twice!");
         }
-        self.buffered = self.pos > 0;
+        if self.pos == 0 {
+            panic!("Cannot unread without reading before!");
+        }
+        self.buffered = true;
     }
 }
 
 
+#[derive(Eq, PartialEq, Debug)]
 enum Token<'a> {
     Regex(&'a str),
     FieldName(&'a str),
@@ -108,12 +112,16 @@ type ScannedToken<'a> = (Token<'a>, usize);
 
 
 struct RuleScanner<'a> {
+    rule: &'a str,
     reader: RuleStrReader<'a>,
 }
 
 impl<'a> RuleScanner<'a> {
     fn new(rule: &'a str) -> RuleScanner<'a> {
-        RuleScanner { reader: RuleStrReader::new(rule) }
+        RuleScanner {
+            rule: rule,
+            reader: RuleStrReader::new(rule),
+        }
     }
 
     fn scan(&mut self) -> Result<ScannedToken<'a>, String> {
@@ -148,7 +156,21 @@ impl<'a> RuleScanner<'a> {
     }
 
     fn scan_regex(&mut self) -> Result<Token<'a>, String> {
-        Ok(Token::EOF)
+        let start_pos = self.reader.pos;
+        let mut prev = '_';  // any symbols except '\'
+        loop {
+            if let Some((ch, _)) = self.reader.read_char() {
+                if ch == '/' && prev != '\\' {
+                    break;
+                }
+                prev = ch;
+            } else {
+                return Err("Unexpected end of parse rule".to_string());
+            }
+        }
+
+        let end_pos = self.reader.pos - 1;
+        Ok(Token::Regex(&self.rule[start_pos..end_pos]))
     }
 
     fn scan_whitespace(&mut self) -> Result<Token<'a>, String> {
@@ -172,5 +194,17 @@ impl<'a> RuleParser<'a> {
 
     fn parse(&mut self) -> Result<ParseRule<'a>, String> {
         Err("Not implemented!".to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RuleScanner, Token};
+
+    #[test]
+    fn scan_it() {
+        let mut scanner = RuleScanner::new("/hello/ const");
+        let token = scanner.scan();
+        assert_eq!(Ok((Token::Regex("hello"), 1)), token);
     }
 }
