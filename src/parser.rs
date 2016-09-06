@@ -73,6 +73,7 @@ impl<'a> RuleStrReader<'a> {
     fn read_char(&mut self) -> Option<(char, usize)> {
         if self.buffered {
             self.buffered = false;
+            self.pos += 1;
             return Some((self.cur, self.pos));
         }
 
@@ -91,6 +92,7 @@ impl<'a> RuleStrReader<'a> {
         if self.pos == 0 {
             panic!("Cannot unread without reading before!");
         }
+        self.pos -= 1;
         self.buffered = true;
     }
 }
@@ -152,7 +154,6 @@ impl<'a> RuleScanner<'a> {
                         token: "field name",
                     });
                 }
-                self.reader.unread();
                 try!(self.scan_field_name())
             }
         };
@@ -161,7 +162,21 @@ impl<'a> RuleScanner<'a> {
     }
 
     fn scan_field_name(&mut self) -> ScanResult<'a> {
-        Ok(Token::EOF)
+        let start_pos = self.reader.pos - 1; // first symbol is already read
+        loop {
+            match self.reader.read_char() {
+                Some((ch, _)) => {
+                    if !self.is_ident_symbol(ch, false) {
+                        self.reader.unread();
+                        break;
+                    }
+                }
+                None => break,
+            }
+        }
+
+        let end_pos = self.reader.pos;
+        Ok(Token::FieldName(&self.rule[start_pos..end_pos]))
     }
 
     fn scan_field_type(&mut self) -> ScanResult<'a> {
@@ -255,6 +270,23 @@ mod tests {
 
             let scanned = s.scan();
             assert_eq!(Ok((Token::EOF, rule.len())), scanned);
+        }
+
+        let mut s = RuleScanner::new(" field_name");
+        let scanned = s.scan();
+        assert_eq!(Ok((Token::WS, 1)), scanned);
+
+        let scanned = s.scan();
+        assert_eq!(Ok((Token::FieldName("field_name"), 2)), scanned);
+    }
+
+    #[test]
+    fn scan_field_name() {
+        for rule in &["field1", "field2,", "field_three ", "field4:", "_f5", "_6", "___"] {
+            let mut s = RuleScanner::new(rule);
+            let scanned = s.scan();
+            let expected = rule.trim_matches(&[' ', ',', ':'] as &[_]);
+            assert_eq!(Ok((Token::FieldName(expected), 1)), scanned);
         }
     }
 }
