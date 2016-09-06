@@ -70,11 +70,11 @@ impl<'a> RuleStrReader<'a> {
         }
     }
 
-    fn read_char(&mut self) -> Option<(char, usize)> {
+    fn read_char(&mut self) -> Option<char> {
         if self.buffered {
             self.buffered = false;
             self.pos += 1;
-            return Some((self.cur, self.pos));
+            return Some(self.cur);
         }
 
         self.cur = match self.rule.next() {
@@ -82,7 +82,7 @@ impl<'a> RuleStrReader<'a> {
             None => return None,
         };
         self.pos += 1;
-        Some((self.cur, self.pos))
+        Some(self.cur)
     }
 
     fn unread(&mut self) {
@@ -116,6 +116,7 @@ type ScannedToken<'a> = (Token<'a>, usize);
 enum RuleScanError {
     IllegalSymbol {
         pos: usize,
+        symbol: char,
         token: &'static str,
     },
     UnexpectedEndOfRule,
@@ -137,11 +138,11 @@ impl<'a> RuleScanner<'a> {
     }
 
     fn scan(&mut self) -> Result<ScannedToken<'a>, RuleScanError> {
-        let (ch0, pos) = match self.reader.read_char() {
-            Some((c, p)) => (c, p),
+        let ch0 = match self.reader.read_char() {
+            Some(c) => c,
             None => return Ok((Token::EOF, self.reader.pos)), 
         };
-
+        let pos = self.reader.pos;
         let token = match ch0 {
             '/' => try!(self.scan_regex()),
             ' ' | '\t' => try!(self.scan_whitespace()),
@@ -150,7 +151,8 @@ impl<'a> RuleScanner<'a> {
             _ => {
                 if !self.is_ident_symbol(ch0, true) {
                     return Err(RuleScanError::IllegalSymbol {
-                        pos: pos,
+                        pos: self.reader.pos,
+                        symbol: ch0,
                         token: "field name",
                     });
                 }
@@ -165,7 +167,7 @@ impl<'a> RuleScanner<'a> {
         let start_pos = self.reader.pos - 1; // first symbol is already read
         loop {
             match self.reader.read_char() {
-                Some((ch, _)) => {
+                Some(ch) => {
                     if !self.is_ident_symbol(ch, false) {
                         self.reader.unread();
                         break;
@@ -180,31 +182,40 @@ impl<'a> RuleScanner<'a> {
     }
 
     fn scan_field_type(&mut self) -> ScanResult<'a> {
-        Ok(Token::EOF)
+        match self.reader.read_char() {
+            Some('i') => {
+                self.reader.unread();
+                try!(self.scan_word("int"));
+                return Ok(Token::TypeInt);
+            }
+            Some('f') => {
+                self.reader.unread();
+                try!(self.scan_word("float"));
+                return Ok(Token::TypeFloat);
+            }
+            Some('d') => {
+                try!(self.scan_symbol('t', "datetime"));
+                return self.scan_dt_pattern();
+            }
+            Some(ch) => {
+                return Err(RuleScanError::IllegalSymbol {
+                    pos: self.reader.pos,
+                    symbol: ch,
+                    token: "field type",
+                })
+            }
+            None => return Err(RuleScanError::UnexpectedEndOfRule),
+        };
     }
 
-    fn scan_regex(&mut self) -> ScanResult<'a> {
-        let start_pos = self.reader.pos;
-        let mut prev = '_';  // any symbols except '\'
-        loop {
-            if let Some((ch, _)) = self.reader.read_char() {
-                if ch == '/' && prev != '\\' {
-                    break;
-                }
-                prev = ch;
-            } else {
-                return Err(RuleScanError::UnexpectedEndOfRule);
-            }
-        }
-
-        let end_pos = self.reader.pos - 1;
-        Ok(Token::Regex(&self.rule[start_pos..end_pos]))
+    fn scan_dt_pattern(&mut self) -> ScanResult<'a> {
+        Ok(Token::TypeDateTime(try!(self.scan_between('[', ']', "datetime pattern"))))
     }
 
     fn scan_whitespace(&mut self) -> ScanResult<'a> {
         loop {
             match self.reader.read_char() {
-                Some((' ', _)) | Some(('\t', _)) => continue,
+                Some(' ') | Some('\t') => continue,
                 None => break,
                 _ => {
                     self.reader.unread();
@@ -214,6 +225,73 @@ impl<'a> RuleScanner<'a> {
         }
 
         Ok(Token::WS)
+    }
+
+    fn scan_regex(&mut self) -> ScanResult<'a> {
+        Ok(Token::Regex(try!(self.scan_until('/'))))
+    }
+
+    fn scan_until(&mut self, symbol: char) -> Result<&'a str, RuleScanError> {
+        if symbol == '\\' {
+            panic!(r"consume_until() is not implemented for reading until '\'");
+        }
+
+        let start_pos = self.reader.pos;
+        let mut prev = match self.reader.read_char() {
+            Some(ch) => {
+                if ch == symbol {
+                    return Ok("");
+                }
+                ch
+            }
+            None => return Err(RuleScanError::UnexpectedEndOfRule),
+        };
+
+        loop {
+            if let Some(ch) = self.reader.read_char() {
+                if ch == symbol && prev != '\\' {
+                    break;
+                }
+                prev = ch;
+            } else {
+                return Err(RuleScanError::UnexpectedEndOfRule);
+            }
+        }
+
+        let end_pos = self.reader.pos - 1;
+        Ok(&self.rule[start_pos..end_pos])
+    }
+
+    fn scan_between(&mut self,
+                    l: char,
+                    r: char,
+                    token: &'static str)
+                    -> Result<&'a str, RuleScanError> {
+        try!(self.scan_symbol(l, token));
+        self.scan_until(r)
+    }
+
+    fn scan_symbol(&mut self, symbol: char, token: &'static str) -> Result<(), RuleScanError> {
+        match self.reader.read_char() {
+            Some(ch) => {
+                if ch != symbol {
+                    return Err(RuleScanError::IllegalSymbol {
+                        pos: self.reader.pos,
+                        symbol: ch,
+                        token: token,
+                    });
+                }
+            }
+            None => return Err(RuleScanError::UnexpectedEndOfRule),
+        }
+        Ok(())
+    }
+
+    fn scan_word(&mut self, word: &'static str) -> Result<(), RuleScanError> {
+        for wch in word.chars() {
+            try!(self.scan_symbol(wch, word));
+        }
+        Ok(())
     }
 
     fn is_ident_symbol(&self, ch0: char, is_first: bool) -> bool {
@@ -288,5 +366,12 @@ mod tests {
             let expected = rule.trim_matches(&[' ', ',', ':'] as &[_]);
             assert_eq!(Ok((Token::FieldName(expected), 1)), scanned);
         }
+    }
+
+    #[test]
+    fn scan_dt() {
+        let mut s = RuleScanner::new("time:dt[%H:%m:%s]");
+        assert_eq!(Ok((Token::FieldName("time"), 1)), s.scan());
+        assert_eq!(Ok((Token::TypeDateTime("%H:%m:%s"), 5)), s.scan());
     }
 }
