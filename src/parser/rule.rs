@@ -49,9 +49,19 @@ impl<'a> RuleParser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<ParseRule<'a>, ParseError> {
-        let (token, pos) = try!(self.scanner.scan());
+        match try!(self.scanner.scan()) {
+            (Token::Regex(re), _) => {
+                Ok(ParseRule {
+                    re: try!(regex::Regex::new(re)),
+                    fields: try!(self.parse_fields()),
+                })
+            }
+            (token, pos) => return Err(ParseError::UnexpectedToken(token, pos)),
+        }
+    }
 
-        Err(ParseError::UnexpectedToken(token, pos))
+    fn parse_fields(&mut self) -> Result<Vec<Field<'a>>, ParseError> {
+        Ok(Vec::new())
     }
 }
 
