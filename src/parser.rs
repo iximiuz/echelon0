@@ -1,4 +1,4 @@
-use self::rule::{ParseRule, RuleParser};
+use rule::{ParseRule, RuleParser};
 
 use self::chrono::{DateTime, UTC};
 
@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::fmt;
 
 extern crate chrono;
-mod rule;
 
 /// Typed value of an entry's field.
 #[derive(Debug)]

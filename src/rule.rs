@@ -7,16 +7,16 @@ pub struct ParseRule<'a> {
     fields: Vec<Field<'a>>,
 }
 
-enum FieldType {
+enum FieldType<'a> {
     Int,
     UInt,
     Float,
-    DateTime,
+    DateTime(&'a str),
     Str,
 }
 
 struct Field<'a> {
-    typ: FieldType,
+    typ: FieldType<'a>,
     name: &'a str,
 }
 
@@ -43,25 +43,68 @@ impl<'a> From<regex::Error> for ParseError<'a> {
     }
 }
 
+impl<'a> From<(Token<'a>, usize)> for ParseError<'a> {
+    fn from((token, pos): (Token<'a>, usize)) -> ParseError<'a> {
+        ParseError::UnexpectedToken(token, pos)
+    }
+}
+
 impl<'a> RuleParser<'a> {
     pub fn new(rule: &'a str) -> RuleParser<'a> {
         RuleParser { scanner: RuleScanner::new(rule) }
     }
 
     pub fn parse(&mut self) -> Result<ParseRule<'a>, ParseError> {
-        match try!(self.scanner.scan()) {
+        match try!(self.scan()) {
             (Token::Regex(re), _) => {
                 Ok(ParseRule {
                     re: try!(regex::Regex::new(re)),
                     fields: try!(self.parse_fields()),
                 })
             }
-            (token, pos) => return Err(ParseError::UnexpectedToken(token, pos)),
+            (token, pos) => err!((token, pos)),
         }
     }
 
     fn parse_fields(&mut self) -> Result<Vec<Field<'a>>, ParseError> {
-        Ok(Vec::new())
+        let (token, pos) = try!(self.scan());
+        if token != Token::WS {
+            err!((token, pos))
+        }
+
+        let mut fields = Vec::new();
+        loop {
+            let name = match try!(self.scan()) {
+                (Token::FieldName(n), _) => n,
+                (token, pos) => err!((token, pos)),
+            };
+
+            // Allowed continuations: field type, sep ',' or EOF.
+            let (token, pos) = try!(self.scan());
+            let typ = match token {
+                Token::TypeInt => FieldType::Int,
+                Token::TypeUInt => FieldType::UInt,
+                Token::TypeFloat => FieldType::Float,
+                Token::TypeDateTime(p) => FieldType::DateTime(p),
+                Token::Comma | Token::EOF => FieldType::Str,
+                _ => err!((token, pos)),
+            };
+
+            fields.push(Field {
+                name: name,
+                typ: typ,
+            });
+
+            if token == Token::EOF {
+                break;
+            }
+        }
+        Ok(fields)
+    }
+
+    #[inline]
+    fn scan(&mut self) -> Result<(Token<'a>, usize), ScanError> {
+        self.scanner.scan()
     }
 }
 

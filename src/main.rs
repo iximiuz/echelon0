@@ -9,7 +9,9 @@ extern crate getopts;
 
 extern crate monstrio;
 
+mod macros;
 mod parser;
+mod rule;
 
 
 fn print_usage(opts: &Options, program: &String) {
