@@ -1,3 +1,5 @@
+use std::error;
+use std::fmt;
 use std::str::Chars;
 
 extern crate regex;
@@ -7,7 +9,7 @@ pub struct ParseRule<'a> {
     fields: Vec<Field<'a>>,
 }
 
-enum FieldType<'a> {
+pub enum FieldType<'a> {
     Int,
     UInt,
     Float,
@@ -15,9 +17,70 @@ enum FieldType<'a> {
     Str,
 }
 
-struct Field<'a> {
+pub struct Field<'a> {
     typ: FieldType<'a>,
     name: &'a str,
+}
+
+#[derive(Debug)]
+pub enum Error {
+    UnexpectedToken {
+        token: String,
+        pos: usize,
+    },
+    ScanFailed(ScanError),
+    BadRegex(regex::Error),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::UnexpectedToken { ref token, ref pos } => {
+                write!(f, "Found unexpected token '{}' at pos {}", token, pos)
+            }
+            Error::ScanFailed(ref err) => write!(f, "Cannot split parse rule on tokens: {}", err),
+            Error::BadRegex(ref err) => write!(f, "Bad regex pattern provided: {}", err),
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::UnexpectedToken { token: _, pos: _ } => "unexpected token found",
+            Error::ScanFailed(ref err) => err.description(),
+            Error::BadRegex(ref err) => err.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            Error::ScanFailed(ref err) => Some(err),
+            Error::BadRegex(ref err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<ScanError> for Error {
+    fn from(err: ScanError) -> Error {
+        Error::ScanFailed(err)
+    }
+}
+
+impl From<regex::Error> for Error {
+    fn from(err: regex::Error) -> Error {
+        Error::BadRegex(err)
+    }
+}
+
+impl<'a> From<(Token<'a>, usize)> for Error {
+    fn from((token, pos): (Token<'a>, usize)) -> Error {
+        Error::UnexpectedToken {
+            token: format!("{:?}", token),
+            pos: pos,
+        }
+    }
 }
 
 /// Parses a given rule string to a corresponding `ParseRule` object.
@@ -25,36 +88,13 @@ pub struct RuleParser<'a> {
     scanner: RuleScanner<'a>,
 }
 
-enum ParseError<'a> {
-    UnexpectedToken(Token<'a>, usize),
-    ScanFailed(ScanError),
-    BadRegex(regex::Error),
-}
-
-impl<'a> From<ScanError> for ParseError<'a> {
-    fn from(err: ScanError) -> ParseError<'a> {
-        ParseError::ScanFailed(err)
-    }
-}
-
-impl<'a> From<regex::Error> for ParseError<'a> {
-    fn from(err: regex::Error) -> ParseError<'a> {
-        ParseError::BadRegex(err)
-    }
-}
-
-impl<'a> From<(Token<'a>, usize)> for ParseError<'a> {
-    fn from((token, pos): (Token<'a>, usize)) -> ParseError<'a> {
-        ParseError::UnexpectedToken(token, pos)
-    }
-}
 
 impl<'a> RuleParser<'a> {
-    pub fn new(rule: &'a str) -> RuleParser<'a> {
+    pub fn new(rule: &'a str) -> RuleParser {
         RuleParser { scanner: RuleScanner::new(rule) }
     }
 
-    pub fn parse(&mut self) -> Result<ParseRule<'a>, ParseError> {
+    pub fn parse(&mut self) -> Result<ParseRule<'a>, Error> {
         match try!(self.scan()) {
             (Token::Regex(re), _) => {
                 Ok(ParseRule {
@@ -66,7 +106,7 @@ impl<'a> RuleParser<'a> {
         }
     }
 
-    fn parse_fields(&mut self) -> Result<Vec<Field<'a>>, ParseError> {
+    fn parse_fields(&mut self) -> Result<Vec<Field<'a>>, Error> {
         let (token, pos) = try!(self.scan());
         if token != Token::WS {
             err!((token, pos))
@@ -122,13 +162,49 @@ enum Token<'a> {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-enum ScanError {
+pub enum ScanError {
     IllegalSymbol {
         pos: usize,
         symbol: char,
         token: &'static str,
     },
     UnexpectedEndOfRule,
+}
+
+impl From<(char, usize, &'static str)> for ScanError {
+    fn from((symbol, pos, token): (char, usize, &'static str)) -> ScanError {
+        ScanError::IllegalSymbol {
+            pos: pos,
+            symbol: symbol,
+            token: token,
+        }
+    }
+}
+
+impl fmt::Display for ScanError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ScanError::IllegalSymbol { pos, symbol, token } => {
+                write!(f,
+                       "Illegal symbol '{}' found at pos {} while reading '{}' token",
+                       symbol,
+                       pos,
+                       token)
+            }
+            ScanError::UnexpectedEndOfRule => write!(f, "Parse rule ended unexpectedly"),
+        }
+    }
+}
+
+impl error::Error for ScanError {
+    fn description(&self) -> &str {
+        match *self {
+            ScanError::IllegalSymbol { pos: _, symbol: _, token: _ } => {
+                "illegal symbol found in rule"
+            }
+            ScanError::UnexpectedEndOfRule => "unexpected end of rule occurred",
+        }
+    }
 }
 
 type ScanResult<'a> = Result<Token<'a>, ScanError>;
@@ -160,11 +236,7 @@ impl<'a> RuleScanner<'a> {
             ',' => Token::Comma,
             _ => {
                 if !self.is_ident_symbol(ch0, true) {
-                    return Err(ScanError::IllegalSymbol {
-                        pos: self.reader.pos,
-                        symbol: ch0,
-                        token: "field name",
-                    });
+                    err!((ch0, self.reader.pos, "FieldName"))
                 }
                 try!(self.scan_field_name())
             }
@@ -212,13 +284,7 @@ impl<'a> RuleScanner<'a> {
                 try!(self.scan_symbol('t', "datetime"));
                 return self.scan_dt_pattern();
             }
-            Some(ch) => {
-                return Err(ScanError::IllegalSymbol {
-                    pos: self.reader.pos,
-                    symbol: ch,
-                    token: "field type",
-                })
-            }
+            Some(ch) => err!((ch, self.reader.pos, "FieldType")),
             None => return Err(ScanError::UnexpectedEndOfRule),
         };
     }
@@ -250,11 +316,7 @@ impl<'a> RuleScanner<'a> {
         match self.reader.read_char() {
             Some(ch) => {
                 if ch != symbol {
-                    return Err(ScanError::IllegalSymbol {
-                        pos: self.reader.pos,
-                        symbol: ch,
-                        token: token,
-                    });
+                    err!((ch, self.reader.pos, token))
                 }
             }
             None => return Err(ScanError::UnexpectedEndOfRule),

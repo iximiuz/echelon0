@@ -1,9 +1,9 @@
 use rule::{ParseRule, RuleParser};
+use rule::Error as RuleError;
 
 use self::chrono::{DateTime, UTC};
 
 use std::collections::HashMap;
-use std::fmt;
 
 extern crate chrono;
 
@@ -21,8 +21,14 @@ pub enum FieldValue {
 pub type Entry<'a> = HashMap<&'a str, FieldValue>;
 
 /// Error cases during parser creation.
-pub enum ParserError {
-    BadParseRule,
+pub enum Error {
+    BadParseRule(RuleError),
+}
+
+impl From<RuleError> for Error {
+    fn from(err: RuleError) -> Error {
+        Error::BadParseRule(err)
+    }
 }
 
 /// Error cases during parsing an entry.
@@ -37,13 +43,9 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(rule: &'a str) -> Result<Parser<'a>, ParserError> {
+    pub fn new(rule: &'a str) -> Result<Parser<'a>, Error> {
         let mut rule_parser = RuleParser::new(rule);
-        let rule = match rule_parser.parse() {
-            Ok(r) => r,
-            Err(_) => return Err(ParserError::BadParseRule),
-        };
-        Ok(Parser { rule: rule })
+        Ok(Parser { rule: try!(rule_parser.parse()) })
     }
 
     pub fn parse_entry(&self, l: &String) -> Result<Entry, ParseError> {
