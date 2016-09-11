@@ -19,8 +19,8 @@ pub enum FieldType<'a> {
 }
 
 pub struct Field<'a> {
-    typ: FieldType<'a>,
-    name: &'a str,
+    pub typ: FieldType<'a>,
+    pub name: &'a str,
 }
 
 #[derive(Debug)]
@@ -154,9 +154,7 @@ impl<'a> RuleParser<'a> {
 
     #[inline]
     fn scan(&mut self) -> Result<(Token<'a>, usize), ScanError> {
-        let r = self.scanner.scan();
-        println!("!!! {:?}", &r);
-        r
+        self.scanner.scan()
     }
 }
 
