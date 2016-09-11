@@ -34,7 +34,7 @@ impl From<RuleError> for Error {
 /// Error cases during parsing an entry.
 #[derive(Debug)]
 pub enum ParseError {
-    Stub,
+    NotMatch,
 }
 
 /// The main part of the Echelon0!
@@ -49,6 +49,8 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_entry(&self, l: &String) -> Result<Entry, ParseError> {
-        Err(ParseError::Stub)
+        match self.rule.re.captures(l) {
+            _ => Err(ParseError::NotMatch),
+        }
     }
 }

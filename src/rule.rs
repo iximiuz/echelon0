@@ -5,10 +5,11 @@ use std::str::Chars;
 extern crate regex;
 
 pub struct ParseRule<'a> {
-    re: regex::Regex,
-    fields: Vec<Field<'a>>,
+    pub re: regex::Regex,
+    pub fields: Vec<Field<'a>>,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum FieldType<'a> {
     Int,
     UInt,
@@ -113,7 +114,15 @@ impl<'a> RuleParser<'a> {
         }
 
         let mut fields = Vec::new();
+        let mut expect_sep = false;
         loop {
+            if expect_sep {
+                let (token, pos) = try!(self.scan());
+                if token != Token::Comma {
+                    err!((token, pos))
+                }
+            }
+
             let name = match try!(self.scan()) {
                 (Token::FieldName(n), _) => n,
                 (token, pos) => err!((token, pos)),
@@ -138,13 +147,16 @@ impl<'a> RuleParser<'a> {
             if token == Token::EOF {
                 break;
             }
+            expect_sep = token != Token::Comma;
         }
         Ok(fields)
     }
 
     #[inline]
     fn scan(&mut self) -> Result<(Token<'a>, usize), ScanError> {
-        self.scanner.scan()
+        let r = self.scanner.scan();
+        println!("!!! {:?}", &r);
+        r
     }
 }
 
@@ -268,25 +280,25 @@ impl<'a> RuleScanner<'a> {
             Some('i') => {
                 self.reader.unread();
                 try!(self.scan_word("int"));
-                return Ok(Token::TypeInt);
+                Ok(Token::TypeInt)
             }
             Some('u') => {
                 self.reader.unread();
                 try!(self.scan_word("uint"));
-                return Ok(Token::TypeUInt);
+                Ok(Token::TypeUInt)
             }
             Some('f') => {
                 self.reader.unread();
                 try!(self.scan_word("float"));
-                return Ok(Token::TypeFloat);
+                Ok(Token::TypeFloat)
             }
             Some('d') => {
                 try!(self.scan_symbol('t', "datetime"));
-                return self.scan_dt_pattern();
+                self.scan_dt_pattern()
             }
             Some(ch) => err!((ch, self.reader.pos, "FieldType")),
-            None => return Err(ScanError::UnexpectedEndOfRule),
-        };
+            None => err!(ScanError::UnexpectedEndOfRule),
+        }
     }
 
     fn scan_dt_pattern(&mut self) -> ScanResult<'a> {
@@ -319,7 +331,7 @@ impl<'a> RuleScanner<'a> {
                     err!((ch, self.reader.pos, token))
                 }
             }
-            None => return Err(ScanError::UnexpectedEndOfRule),
+            None => err!(ScanError::UnexpectedEndOfRule),
         }
         Ok(())
     }
@@ -344,7 +356,7 @@ impl<'a> RuleScanner<'a> {
                 }
                 ch
             }
-            None => return Err(ScanError::UnexpectedEndOfRule),
+            None => err!(ScanError::UnexpectedEndOfRule),
         };
 
         loop {
@@ -354,7 +366,7 @@ impl<'a> RuleScanner<'a> {
                 }
                 prev = ch;
             } else {
-                return Err(ScanError::UnexpectedEndOfRule);
+                err!(ScanError::UnexpectedEndOfRule)
             }
         }
 
@@ -425,7 +437,19 @@ impl<'a> RuleReader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuleScanner, ScanError, Token};
+    use super::{FieldType, RuleParser, RuleScanner, ScanError, Token};
+
+    #[test]
+    fn parse() {
+        let mut parser = RuleParser::new(r"/(\d+)\s(\w)/ time:uint,url");
+        let rule = parser.parse().unwrap();
+        assert_eq!(r"(\d+)\s(\w)", rule.re.as_str());
+        assert_eq!(2, rule.fields.len());
+        assert_eq!("time", rule.fields[0].name);
+        assert_eq!(FieldType::UInt, rule.fields[0].typ);
+        assert_eq!("url", rule.fields[1].name);
+        assert_eq!(FieldType::Str, rule.fields[1].typ);
+    }
 
     #[test]
     fn scan_regex() {
