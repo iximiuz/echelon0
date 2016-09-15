@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::error;
 use std::fmt;
 use std::str::Chars;
@@ -35,6 +36,7 @@ pub enum Error {
         captures_count: usize,
         fields_count: usize,
     },
+    NonUniqueFieldName(String),
 }
 
 impl fmt::Display for Error {
@@ -51,6 +53,7 @@ impl fmt::Display for Error {
                        captures_count,
                        fields_count)
             }
+            Error::NonUniqueFieldName(ref name) => write!(f, "Non-unique name '{}' found", name),
         }
     }
 }
@@ -62,6 +65,7 @@ impl error::Error for Error {
             Error::ScanFailed(ref err) => err.description(),
             Error::BadRegex(ref err) => err.description(),
             Error::CapturesFieldsMismatch { .. } => "capture groups don't match fields",
+            Error::NonUniqueFieldName(_) => "not all fields have unique names",
         }
     }
 
@@ -133,6 +137,7 @@ impl<'a> RuleParser<'a> {
             err!((token, pos))
         }
 
+        let mut known_names = HashSet::new();
         let mut fields = Vec::new();
         let mut expect_sep = false;
         loop {
@@ -147,6 +152,11 @@ impl<'a> RuleParser<'a> {
                 (Token::FieldName(n), _) => n,
                 (token, pos) => err!((token, pos)),
             };
+
+            if known_names.contains(name) {
+                return Err(Error::NonUniqueFieldName(name.to_owned()));
+            }
+            known_names.insert(name);
 
             // Allowed continuations: field type, sep ',' or EOF.
             let (token, pos) = try!(self.scan());
@@ -476,6 +486,29 @@ mod tests {
             Err(Error::UnexpectedToken { token, pos }) => {
                 assert_eq!("EOF", token);
                 assert_eq!(10, pos);
+            }
+            _ => unreachable!(), 
+        }
+    }
+
+    #[test]
+    fn parse_unequal_capture_groups_and_fields() {
+        let mut parser = RuleParser::new(r"/(\w+),(\w+)-(\w+)/ f1,f2");
+        match parser.parse() {
+            Err(Error::CapturesFieldsMismatch { captures_count, fields_count }) => {
+                assert_eq!(4, captures_count);
+                assert_eq!(2, fields_count);
+            }
+            _ => unreachable!(), 
+        }
+    }
+
+    #[test]
+    fn parse_non_unique_fields() {
+        let mut parser = RuleParser::new(r"/(\d+)\s(\w+)\s(\w+)/ foo,bar,foo");
+        match parser.parse() {
+            Err(Error::NonUniqueFieldName(name)) => {
+                assert_eq!("foo", name);
             }
             _ => unreachable!(), 
         }
