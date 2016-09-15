@@ -31,6 +31,10 @@ pub enum Error {
     },
     ScanFailed(ScanError),
     BadRegex(regex::Error),
+    CapturesFieldsMismatch {
+        captures_count: usize,
+        fields_count: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -41,6 +45,12 @@ impl fmt::Display for Error {
             }
             Error::ScanFailed(ref err) => write!(f, "Cannot split parse rule on tokens: {}", err),
             Error::BadRegex(ref err) => write!(f, "Bad regex pattern provided: {}", err),
+            Error::CapturesFieldsMismatch { ref captures_count, ref fields_count } => {
+                write!(f,
+                       "Capture group count [{}] is not equal to fields count [{}]",
+                       captures_count,
+                       fields_count)
+            }
         }
     }
 }
@@ -48,9 +58,10 @@ impl fmt::Display for Error {
 impl error::Error for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::UnexpectedToken { token: _, pos: _ } => "unexpected token found",
+            Error::UnexpectedToken { .. } => "unexpected token found",
             Error::ScanFailed(ref err) => err.description(),
             Error::BadRegex(ref err) => err.description(),
+            Error::CapturesFieldsMismatch { .. } => "capture groups don't match fields",
         }
     }
 
@@ -98,10 +109,19 @@ impl<'a> RuleParser<'a> {
     pub fn parse(&mut self) -> Result<ParseRule<'a>, Error> {
         match try!(self.scan()) {
             (Token::Regex(re), _) => {
-                Ok(ParseRule {
-                    re: try!(regex::Regex::new(re)),
-                    fields: try!(self.parse_fields()),
-                })
+                let re = try!(regex::Regex::new(re));
+                let fields = try!(self.parse_fields());
+                if re.captures_len() != fields.len() + 1 {
+                    Err(Error::CapturesFieldsMismatch {
+                        captures_count: re.captures_len(),
+                        fields_count: fields.len(),
+                    })
+                } else {
+                    Ok(ParseRule {
+                        re: re,
+                        fields: fields,
+                    })
+                }
             }
             (token, pos) => err!((token, pos)),
         }
@@ -435,7 +455,7 @@ impl<'a> RuleReader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{FieldType, RuleParser, RuleScanner, ScanError, Token};
+    use super::{FieldType, RuleParser, RuleScanner, Error, ScanError, Token};
 
     #[test]
     fn parse() {
@@ -447,6 +467,18 @@ mod tests {
         assert_eq!(FieldType::UInt, rule.fields[0].typ);
         assert_eq!("url", rule.fields[1].name);
         assert_eq!(FieldType::Str, rule.fields[1].typ);
+    }
+
+    #[test]
+    fn parse_no_fields() {
+        let mut parser = RuleParser::new(r"/some_re/ ");
+        match parser.parse() {
+            Err(Error::UnexpectedToken { token, pos }) => {
+                assert_eq!("EOF", token);
+                assert_eq!(10, pos);
+            }
+            _ => unreachable!(), 
+        }
     }
 
     #[test]
