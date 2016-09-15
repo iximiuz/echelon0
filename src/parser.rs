@@ -9,13 +9,13 @@ use std::num;
 extern crate chrono;
 
 /// Typed value of an entry's field.
-#[derive(Debug)]
-pub enum FieldValue<'a> {
+#[derive(Debug, PartialEq)]
+pub enum FieldValue<'t> {
     Int(i64),
     UInt(u64),
     Float(f64),
     DateTime(DateTime<UTC>),
-    Str(&'a str),
+    Str(&'t str),
 }
 
 /// Parsed data unit (line, message, whatever).
@@ -36,7 +36,8 @@ impl From<RuleError> for Error {
 /// Error cases during parsing an entry.
 #[derive(Debug)]
 pub enum ParseError {
-    NotMatch,
+    LineNotMatch,
+    EmptyCaptureGroup(usize),
     ParseIntError,
     ParseFloatError,
 }
@@ -64,18 +65,20 @@ impl<'a> Parser<'a> {
         Ok(Parser { rule: try!(rule_parser.parse()) })
     }
 
-    pub fn parse_entry<'t>(&'t self, l: &'t String) -> Result<Entry, ParseError> {
+    pub fn parse_entry<'t>(&self, l: &'t String) -> Result<Entry<'a, 't>, ParseError> {
         // TODO: check that all fields have unique names.
 
-        let matches = self.rule.re.find_iter(l).collect::<Vec<(usize, usize)>>();
-        if self.rule.fields.len() + 1 != matches.len() {
-            return Err(ParseError::NotMatch);
-        }
+        let captures = match self.rule.re.captures(l) {
+            Some(c) => c,
+            None => return Err(ParseError::LineNotMatch),
+        };
 
         let mut entry = Entry::new();
         for (i, field) in self.rule.fields.iter().enumerate() {
-            let (lo, hi) = matches[i + 1];
-            let val = &l[lo..hi];
+            let val = match captures.at(i + 1) {
+                Some(v) => v,
+                None => return Err(ParseError::EmptyCaptureGroup(i + 1)),
+            };
             let val = match field.typ {
                 FieldType::Int => FieldValue::Int(try!(val.parse())),
                 FieldType::UInt => FieldValue::UInt(try!(val.parse())),
@@ -95,4 +98,19 @@ impl<'a> Parser<'a> {
     //         err!((
     //     }
     // }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_entry() {
+        let rule = r"/(\d+)\s(\w+)/ num:uint,res";
+        let line = String::from("123 some_word");
+        let parser = Parser::new(&rule).unwrap();
+        let entry = parser.parse_entry(&line).unwrap();
+
+        assert_eq!(FieldValue::UInt(123), entry[&"num"]);
+    }
 }
