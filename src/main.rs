@@ -15,7 +15,8 @@ mod rule;
 
 
 fn print_usage(opts: &Options, program: &String) {
-    let brief = format!("Usage: {} [file ...] [-s start_time] [-f stop_time]",
+    let brief = format!("Usage: {} parse_rule [glob ...] [-i include_pattern | -e \
+                         exclude_pattern]",
                         program);
     println!("{}", opts.usage(&brief));
 }
@@ -32,14 +33,14 @@ fn main() {
     let program = args[0].clone();
 
     let mut opts = Options::new();
-    opts.optopt("s",
-                "start",
-                "if presents only entries after it will be processed",
-                "START_TIME");
-    opts.optopt("f",
-                "stop",
-                "if presents only entries before it will be processed",
-                "STOP_TIME");
+    opts.optopt("i",
+                "include",
+                "if presents only entries matched to this pattern will be parsed",
+                "INCLUDE");
+    opts.optopt("e",
+                "exclude",
+                "if presents only entries not matched to this pattern will be processed",
+                "EXCLUDE");
     opts.optflag("h", "help", "show this message");
     let args = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -56,7 +57,7 @@ fn main() {
 
     let mut glob_input = monstrio::Input::glob(args.free.into_iter());
     let reader = glob_input.as_mut();
-    let parser = match parser::Parser::new(r"/.+/ line") {
+    let parser = match parser::Parser::new(r"/(.+)/ line", None, None) { // args.opt_str("i"), args.opt_str("e")
         Ok(p) => p,
         Err(err) => {
             println!("Cannot create parser! {:?}", err);

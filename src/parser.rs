@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::num;
 
 extern crate chrono;
+extern crate regex;
 
 /// Typed value of an entry's field.
 #[derive(Debug, PartialEq)]
@@ -24,12 +25,19 @@ pub type Entry<'a, 't> = HashMap<&'a str, FieldValue<'t>>;
 /// Error cases during parser creation.
 #[derive(Debug)]
 pub enum Error {
+    FilterRegexError(regex::Error),
     BadParseRule(RuleError),
 }
 
 impl From<RuleError> for Error {
     fn from(err: RuleError) -> Error {
         Error::BadParseRule(err)
+    }
+}
+
+impl From<regex::Error> for Error {
+    fn from(err: regex::Error) -> Error {
+        Error::FilterRegexError(err)
     }
 }
 
@@ -64,12 +72,30 @@ impl From<chrono::ParseError> for ParseError {
 /// The main part of the Echelon0!
 pub struct Parser<'a> {
     rule: ParseRule<'a>,
+    include: Option<regex::Regex>,
+    exclude: Option<regex::Regex>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(rule: &'a str) -> Result<Parser<'a>, Error> {
+    pub fn new(rule: &'a str,
+               include: Option<&'a str>,
+               exclude: Option<&'a str>)
+               -> Result<Parser<'a>, Error> {
+        let include = match include {
+            Some(p) => Some(try!(regex::Regex::new(p))),
+            None => None,
+        };
+        let exclude = match exclude {
+            Some(p) => Some(try!(regex::Regex::new(p))),
+            None => None,
+        };
         let mut rule_parser = RuleParser::new(rule);
-        Ok(Parser { rule: try!(rule_parser.parse()) })
+        let rule = try!(rule_parser.parse());
+        Ok(Parser {
+            rule: rule,
+            include: include,
+            exclude: exclude,
+        })
     }
 
     pub fn parse_entry<'t>(&self, l: &'t String) -> Result<Entry<'a, 't>, ParseError> {
