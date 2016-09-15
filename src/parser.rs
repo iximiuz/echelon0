@@ -1,7 +1,7 @@
 use rule::{FieldType, ParseRule, RuleParser};
 use rule::Error as RuleError;
 
-use self::chrono::{DateTime, UTC};
+use self::chrono::{DateTime, TimeZone, UTC};
 
 use std::collections::HashMap;
 use std::num;
@@ -40,6 +40,7 @@ pub enum ParseError {
     EmptyCaptureGroup(usize),
     ParseIntError,
     ParseFloatError,
+    ParseDateTimeError(chrono::ParseError),
 }
 
 impl From<num::ParseIntError> for ParseError {
@@ -51,6 +52,12 @@ impl From<num::ParseIntError> for ParseError {
 impl From<num::ParseFloatError> for ParseError {
     fn from(_: num::ParseFloatError) -> ParseError {
         ParseError::ParseFloatError
+    }
+}
+
+impl From<chrono::ParseError> for ParseError {
+    fn from(err: chrono::ParseError) -> ParseError {
+        ParseError::ParseDateTimeError(err)
     }
 }
 
@@ -66,8 +73,6 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_entry<'t>(&self, l: &'t String) -> Result<Entry<'a, 't>, ParseError> {
-        // TODO: check that all fields have unique names.
-
         let captures = match self.rule.re.captures(l) {
             Some(c) => c,
             None => return Err(ParseError::LineNotMatch),
@@ -80,10 +85,10 @@ impl<'a> Parser<'a> {
                 None => return Err(ParseError::EmptyCaptureGroup(i + 1)),
             };
             let val = match field.typ {
-                FieldType::Int => FieldValue::Int(try!(val.parse())),
+                FieldType::Int => FieldValue::Int(try!(val.parse())),  // TODO: improve error
                 FieldType::UInt => FieldValue::UInt(try!(val.parse())),
                 FieldType::Float => FieldValue::Float(try!(val.parse())),
-                FieldType::DateTime(_) => panic!("Not implemented"),
+                FieldType::DateTime(format) => try!(self.parse_dt(val, format)),
                 FieldType::Str => FieldValue::Str(val), 
             };
             entry.insert(field.name, val);
@@ -91,13 +96,10 @@ impl<'a> Parser<'a> {
         Ok(entry)
     }
 
-    // #[inline]
-    // fn parse_int(&self, l: &str, field_name: &str) -> Result<FiledValue::Int, ParseError> {
-    //     let val = l.parse();
-    //     if !val.is_ok() {
-    //         err!((
-    //     }
-    // }
+    #[inline]
+    fn parse_dt<'t>(&self, val: &'t str, format: &'a str) -> Result<FieldValue<'t>, ParseError> {
+        Ok(FieldValue::DateTime(try!(UTC.datetime_from_str(val, format)))) // TODO: improve error
+    }
 }
 
 #[cfg(test)]
