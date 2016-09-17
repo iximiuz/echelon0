@@ -5,6 +5,7 @@ use std::str::Chars;
 
 extern crate regex;
 
+#[derive(Debug)]
 pub struct ParseRule<'a> {
     pub re: regex::Regex,
     pub fields: Vec<Field<'a>>,
@@ -19,6 +20,7 @@ pub enum FieldType<'a> {
     Str,
 }
 
+#[derive(Debug)]
 pub struct Field<'a> {
     pub typ: FieldType<'a>,
     pub name: &'a str,
@@ -27,11 +29,14 @@ pub struct Field<'a> {
 #[derive(Debug)]
 pub enum Error {
     UnexpectedToken {
-        token: String,
+        actual: String,
+        expected: &'static str,
         pos: usize,
+        excerpt: String,
     },
     ScanFailed(ScanError),
     BadRegex(regex::Error),
+    NoCaptureGroups,
     CapturesFieldsMismatch {
         captures_count: usize,
         fields_count: usize,
@@ -42,11 +47,17 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::UnexpectedToken { ref token, ref pos } => {
-                write!(f, "Found unexpected token '{}' at pos {}", token, pos)
+            Error::UnexpectedToken { ref actual, ref expected, ref pos, ref excerpt } => {
+                write!(f,
+                       "Found unexpected token '{}' at pos {} '{}'. Expected {}",
+                       actual,
+                       pos,
+                       excerpt,
+                       expected)
             }
             Error::ScanFailed(ref err) => write!(f, "Cannot split parse rule on tokens: {}", err),
             Error::BadRegex(ref err) => write!(f, "Bad regex pattern provided: {}", err),
+            Error::NoCaptureGroups => write!(f, "Regex pattern doesn't have capture groups"),
             Error::CapturesFieldsMismatch { ref captures_count, ref fields_count } => {
                 write!(f,
                        "Capture group count [{}] is not equal to fields count [{}]",
@@ -64,6 +75,7 @@ impl error::Error for Error {
             Error::UnexpectedToken { .. } => "unexpected token found",
             Error::ScanFailed(ref err) => err.description(),
             Error::BadRegex(ref err) => err.description(),
+            Error::NoCaptureGroups => "regex doesn't have capture groups",
             Error::CapturesFieldsMismatch { .. } => "capture groups don't match fields",
             Error::NonUniqueFieldName(_) => "not all fields have unique names",
         }
@@ -90,11 +102,13 @@ impl From<regex::Error> for Error {
     }
 }
 
-impl<'a> From<(Token<'a>, usize)> for Error {
-    fn from((token, pos): (Token<'a>, usize)) -> Error {
+impl<'a> From<(Token<'a>, usize, &'static str, &'a str)> for Error {
+    fn from((token, pos, expected, rule): (Token<'a>, usize, &'static str, &'a str)) -> Error {
         Error::UnexpectedToken {
-            token: format!("{:?}", token),
+            actual: format!("{:?}", token),
+            expected: expected,
             pos: pos,
+            excerpt: excerpt(rule, pos),
         }
     }
 }
@@ -114,27 +128,31 @@ impl<'a> RuleParser<'a> {
         match try!(self.scan()) {
             (Token::Regex(re), _) => {
                 let re = try!(regex::Regex::new(re));
+                if re.captures_len() <= 1 {
+                    return Err(Error::NoCaptureGroups);
+                }
+
                 let fields = try!(self.parse_fields());
                 if re.captures_len() != fields.len() + 1 {
-                    Err(Error::CapturesFieldsMismatch {
+                    return Err(Error::CapturesFieldsMismatch {
                         captures_count: re.captures_len(),
                         fields_count: fields.len(),
-                    })
-                } else {
-                    Ok(ParseRule {
-                        re: re,
-                        fields: fields,
-                    })
+                    });
                 }
+
+                Ok(ParseRule {
+                    re: re,
+                    fields: fields,
+                })
             }
-            (token, pos) => err!((token, pos)),
+            (token, pos) => err!((token, pos, "Regex", self.scanner.rule)),
         }
     }
 
     fn parse_fields(&mut self) -> Result<Vec<Field<'a>>, Error> {
         let (token, pos) = try!(self.scan());
         if token != Token::WS {
-            err!((token, pos))
+            err!((token, pos, "WS", self.scanner.rule))
         }
 
         let mut known_names = HashSet::new();
@@ -142,15 +160,16 @@ impl<'a> RuleParser<'a> {
         let mut expect_sep = false;
         loop {
             if expect_sep {
-                let (token, pos) = try!(self.scan());
-                if token != Token::Comma {
-                    err!((token, pos))
+                match try!(self.scan()) {
+                    (Token::EOF, _) => break,
+                    (Token::Comma, _) => {}  // It's OK!
+                    (token, pos) => err!((token, pos, "Comma", self.scanner.rule)),
                 }
             }
 
             let name = match try!(self.scan()) {
                 (Token::FieldName(n), _) => n,
-                (token, pos) => err!((token, pos)),
+                (token, pos) => err!((token, pos, "FieldName", self.scanner.rule)),
             };
 
             if known_names.contains(name) {
@@ -166,7 +185,12 @@ impl<'a> RuleParser<'a> {
                 Token::TypeFloat => FieldType::Float,
                 Token::TypeDateTime(p) => FieldType::DateTime(p),
                 Token::Comma | Token::EOF => FieldType::Str,
-                _ => err!((token, pos)),
+                _ => {
+                    err!((token,
+                          pos,
+                          "one of TypeInt, TypeUInt, TypeFloat, TypeDateTime, Comma, EOF",
+                          self.scanner.rule))
+                }
             };
 
             fields.push(Field {
@@ -206,16 +230,24 @@ pub enum ScanError {
     IllegalSymbol {
         pos: usize,
         symbol: char,
+        excerpt: String,
         token: &'static str,
     },
     UnexpectedEndOfRule,
 }
 
-impl From<(char, usize, &'static str)> for ScanError {
-    fn from((symbol, pos, token): (char, usize, &'static str)) -> ScanError {
+fn excerpt(rule: &str, pos: usize) -> String {
+    let lo = ::std::cmp::max(0, pos as i64 - 5) as usize;
+    let hi = ::std::cmp::min(rule.len() - 1, pos + 5);
+    String::from(&rule[lo..hi])
+}
+
+impl<'a> From<(char, usize, &'a str, &'static str)> for ScanError {
+    fn from((symbol, pos, rule, token): (char, usize, &'a str, &'static str)) -> ScanError {
         ScanError::IllegalSymbol {
             pos: pos,
             symbol: symbol,
+            excerpt: excerpt(rule, pos),
             token: token,
         }
     }
@@ -224,11 +256,12 @@ impl From<(char, usize, &'static str)> for ScanError {
 impl fmt::Display for ScanError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ScanError::IllegalSymbol { pos, symbol, token } => {
+            ScanError::IllegalSymbol { pos, symbol, ref excerpt, token } => {
                 write!(f,
-                       "Illegal symbol '{}' found at pos {} while reading '{}' token",
+                       "Illegal symbol '{}' found at pos {} '..{}..' while reading '{}' token",
                        symbol,
                        pos,
+                       excerpt,
                        token)
             }
             ScanError::UnexpectedEndOfRule => write!(f, "Parse rule ended unexpectedly"),
@@ -239,9 +272,7 @@ impl fmt::Display for ScanError {
 impl error::Error for ScanError {
     fn description(&self) -> &str {
         match *self {
-            ScanError::IllegalSymbol { pos: _, symbol: _, token: _ } => {
-                "illegal symbol found in rule"
-            }
+            ScanError::IllegalSymbol { .. } => "illegal symbol found in rule",
             ScanError::UnexpectedEndOfRule => "unexpected end of rule occurred",
         }
     }
@@ -276,7 +307,7 @@ impl<'a> RuleScanner<'a> {
             ',' => Token::Comma,
             _ => {
                 if !self.is_ident_symbol(ch0, true) {
-                    err!((ch0, self.reader.pos, "FieldName"))
+                    err!((ch0, self.reader.pos, self.rule, "FieldName"))
                 }
                 try!(self.scan_field_name())
             }
@@ -324,7 +355,7 @@ impl<'a> RuleScanner<'a> {
                 try!(self.scan_symbol('t', "datetime"));
                 self.scan_dt_pattern()
             }
-            Some(ch) => err!((ch, self.reader.pos, "FieldType")),
+            Some(ch) => err!((ch, self.reader.pos, self.rule, "FieldType")),
             None => err!(ScanError::UnexpectedEndOfRule),
         }
     }
@@ -356,7 +387,7 @@ impl<'a> RuleScanner<'a> {
         match self.reader.read_char() {
             Some(ch) => {
                 if ch != symbol {
-                    err!((ch, self.reader.pos, token))
+                    err!((ch, self.reader.pos, self.rule, token))
                 }
             }
             None => err!(ScanError::UnexpectedEndOfRule),
@@ -481,11 +512,12 @@ mod tests {
 
     #[test]
     fn parse_no_fields() {
-        let mut parser = RuleParser::new(r"/some_re/ ");
+        let mut parser = RuleParser::new(r"/(some_re)/ ");
         match parser.parse() {
-            Err(Error::UnexpectedToken { token, pos }) => {
-                assert_eq!("EOF", token);
-                assert_eq!(10, pos);
+            Err(Error::UnexpectedToken { actual, expected, pos, .. }) => {
+                assert_eq!("EOF", actual);
+                assert_eq!("FieldName", expected);
+                assert_eq!(12, pos);
             }
             _ => unreachable!(), 
         }
@@ -512,6 +544,15 @@ mod tests {
             }
             _ => unreachable!(), 
         }
+    }
+
+    #[test]
+    fn parse_nginx_combined() {
+        let rule = concat!(r"/([\d\.]+)\s+-\s+(.+)\s+\[(.+)\].+/ ",
+                           r"remote_addr,remote_user,time_local:dt[%d/%b/%Y:%H:%M:%S %z]");
+        let mut parser = RuleParser::new(&rule);
+        let parsed = parser.parse();
+        assert!(parsed.is_ok(), format!("{:?}", parsed));
     }
 
     #[test]
@@ -567,5 +608,23 @@ mod tests {
         let mut s = RuleScanner::new("time:dt[%H:%m:%s]");
         assert_eq!(Ok((Token::FieldName("time"), 1)), s.scan());
         assert_eq!(Ok((Token::TypeDateTime("%H:%m:%s"), 5)), s.scan());
+
+        let mut s = RuleScanner::new("time_local:dt[%d/%b/%Y:%H:%M:%S %z]");
+        assert_eq!(Ok((Token::FieldName("time_local"), 1)), s.scan());
+        assert_eq!(Ok((Token::TypeDateTime("%d/%b/%Y:%H:%M:%S %z"), 11)),
+                   s.scan());
+
+        let rule = concat!(r"/([\d\.]+)\s+-\s+(.+)\s+\[(.+)\].+/ ",
+                           r"remote_addr,remote_user,time_local:dt[%d/%b/%Y:%H:%M:%S %z]");
+        let mut s = RuleScanner::new(&rule);
+        assert!(s.scan().is_ok());  // regex
+        assert!(s.scan().is_ok());  // ws
+        assert!(s.scan().is_ok());  // raddr
+        assert!(s.scan().is_ok());  // comma
+        assert!(s.scan().is_ok());  // user
+        assert!(s.scan().is_ok());  // comma
+        assert_eq!(Ok((Token::FieldName("time_local"), 61)), s.scan());
+        assert_eq!(Ok((Token::TypeDateTime("%d/%b/%Y:%H:%M:%S %z"), 71)),
+                   s.scan());
     }
 }
