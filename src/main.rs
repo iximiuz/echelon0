@@ -57,7 +57,7 @@ fn main() {
 
     let mut glob_input = monstrio::Input::glob(args.free.into_iter());
     let reader = glob_input.as_mut();
-    let parser = match parser::Parser::new(r"/(.+)/ line", None, None) { // args.opt_str("i"), args.opt_str("e")
+    let parser = match parser::Parser::new(r"/(.+)/ line") { // args.opt_str("i"), args.opt_str("e")
         Ok(p) => p,
         Err(err) => {
             println!("Cannot create parser! {:?}", err);

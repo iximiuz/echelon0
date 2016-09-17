@@ -77,28 +77,28 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(rule: &'a str,
-               include: Option<&'a str>,
-               exclude: Option<&'a str>)
-               -> Result<Parser<'a>, Error> {
-        let include = match include {
-            Some(p) => Some(try!(regex::Regex::new(p))),
-            None => None,
-        };
-        let exclude = match exclude {
-            Some(p) => Some(try!(regex::Regex::new(p))),
-            None => None,
-        };
+    pub fn new(rule: &'a str) -> Result<Parser<'a>, Error> {
         let mut rule_parser = RuleParser::new(rule);
         let rule = try!(rule_parser.parse());
         Ok(Parser {
             rule: rule,
-            include: include,
-            exclude: exclude,
+            include: None,
+            exclude: None,
         })
     }
 
+    pub fn set_include_filter(&mut self, f: &str) -> Result<(), Error> {
+        self.include = Some(try!(regex::Regex::new(f)));
+        Ok(())
+    }
+
+    pub fn set_exclude_filter(&mut self, f: &str) -> Result<(), Error> {
+        self.exclude = Some(try!(regex::Regex::new(f)));
+        Ok(())
+    }
+
     pub fn parse_entry<'t>(&self, l: &'t String) -> Result<Entry<'a, 't>, ParseError> {
+
         let captures = match self.rule.re.captures(l) {
             Some(c) => c,
             None => return Err(ParseError::LineNotMatch),
@@ -131,6 +131,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::chrono::{TimeZone, UTC};
 
     #[test]
     fn parse_entry() {
@@ -140,5 +141,37 @@ mod tests {
         let entry = parser.parse_entry(&line).unwrap();
 
         assert_eq!(FieldValue::UInt(123), entry[&"num"]);
+    }
+
+    #[test]
+    fn parse_nginx_combined() {
+        let rule = concat!(r#"/([\d\.]+) - (.+) \[(.+)\] "(.+) ([^?]+)\??(.*) HTTP.+" (\d{3}) (\d+) "(.+)" "(.+)"/"#,
+                           " remote_addr,remote_user,time_local:dt[%d/%b/%Y:%H:%M:%S %z]", 
+                           ",method,path,query,status:uint,body_bytes_sent:uint,referrer,user_agent");
+
+        let line = concat!(r#"82.208.100.105 - - [01/Aug/2016:22:59:50 +0000] "#,
+                           r#""GET /platforms/sa/apps/115?consumer=portal-ru&user_id=11124493 "#,
+                           r#"HTTP/1.1" 200 9127 "https://espritgames.ru/fairytail/go/" "#,
+                           r#""Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 "#,
+                           r#"(KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36""#);
+        let line = String::from(line);
+        let parser = Parser::new(&rule).unwrap();
+        let entry = parser.parse_entry(&line).unwrap();
+
+        assert_eq!(FieldValue::Str("82.208.100.105"), entry[&"remote_addr"]);
+        assert_eq!(FieldValue::Str("-"), entry[&"remote_user"]);
+        assert_eq!(FieldValue::DateTime(UTC.ymd(2016, 8, 1).and_hms(22, 59, 50)),
+                   entry[&"time_local"]);
+        assert_eq!(FieldValue::Str("GET"), entry[&"method"]);
+        assert_eq!(FieldValue::Str("/platforms/sa/apps/115"), entry[&"path"]);
+        assert_eq!(FieldValue::Str("consumer=portal-ru&user_id=11124493"),
+                   entry[&"query"]);
+        assert_eq!(FieldValue::UInt(200), entry[&"status"]);
+        assert_eq!(FieldValue::UInt(9127), entry[&"body_bytes_sent"]);
+        assert_eq!(FieldValue::Str("https://espritgames.ru/fairytail/go/"),
+                   entry[&"referrer"]);
+        assert_eq!(FieldValue::Str("Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 \
+                                    (KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36"),
+                   entry[&"user_agent"]);
     }
 }
