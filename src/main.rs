@@ -1,4 +1,5 @@
 use std::env;
+use std::io;
 use std::io::BufRead;
 use std::process;
 
@@ -52,18 +53,22 @@ fn main() {
         return;
     }
 
-    // let stdin = io::stdin();
-    // let stdin_input = monstrio::Input::stdin(&stdin);
-
-    let mut glob_input = monstrio::Input::glob(args.free.into_iter());
-    let reader = glob_input.as_mut();
-    let parser = match parser::Parser::new(r"/(.+)/ line") { // args.opt_str("i"), args.opt_str("e")
+    let parser = match parser::Parser::new(&args.free[0]) { // args.opt_str("i"), args.opt_str("e")
         Ok(p) => p,
         Err(err) => {
             println!("Cannot create parser! {:?}", err);
             return;
         }
     };
+
+    let mut glob_input = monstrio::Input::glob(args.free[1..].into_iter());
+    let reader = glob_input.as_mut();
+
+    // else {
+    //     let stdin = io::stdin();
+    //     let stdin_input = monstrio::Input::stdin(&stdin);
+    //     stdin_input.as_mut()
+    // };
 
     loop {
         let mut line = String::new();
