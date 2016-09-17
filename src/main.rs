@@ -10,6 +10,7 @@ extern crate getopts;
 
 extern crate monstrio;
 
+mod echelon0;
 mod macros;
 mod parser;
 mod rule;
@@ -53,7 +54,7 @@ fn main() {
         return;
     }
 
-    let parser = match parser::Parser::new(&args.free[0]) { // args.opt_str("i"), args.opt_str("e")
+    let parser = match parser::Parser::new(&args.free[0]) { 
         Ok(p) => p,
         Err(err) => {
             println!("Cannot create parser! {:?}", err);
@@ -61,36 +62,25 @@ fn main() {
         }
     };
 
-    let mut glob_input = monstrio::Input::glob(args.free[1..].into_iter());
-    let reader = glob_input.as_mut();
+    let stdin;
+    let mut stdin_input;
+    let mut glob_input;
+    let reader: &mut BufRead = if args.free.len() > 1 {
+        glob_input = monstrio::Input::glob(args.free[1..].into_iter());
+        glob_input.as_mut()
+    } else {
+        stdin = io::stdin();
+        stdin_input = monstrio::Input::stdin(&stdin);
+        stdin_input.as_mut()
+    };
 
-    // else {
-    //     let stdin = io::stdin();
-    //     let stdin_input = monstrio::Input::stdin(&stdin);
-    //     stdin_input.as_mut()
-    // };
-
-    loop {
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-            }
-            Err(err) => {
-                println!("{:?}", err);
-                break;
-            }
-        }
-
-        match parser.parse_entry(&line) {
-            Ok(entry) => {
-                println!("{:?}", entry);
-            }
-            Err(err) => {
-                println!("{:?}", err);
-            }
-        }
+    let mut echelon0 = echelon0::Echelon0::new(reader, &parser);
+    if let Some(ref include) = args.opt_str("i") {
+        echelon0.set_include_filter(include);
     }
+    if let Some(ref exclude) = args.opt_str("e") {
+        echelon0.set_exclude_filter(exclude);
+    }
+
+    echelon0.start();
 }

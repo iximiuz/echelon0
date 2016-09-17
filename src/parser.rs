@@ -25,19 +25,12 @@ pub type Entry<'a, 't> = HashMap<&'a str, FieldValue<'t>>;
 /// Error cases during parser creation.
 #[derive(Debug)]
 pub enum Error {
-    FilterRegexError(regex::Error),
     BadParseRule(RuleError),
 }
 
 impl From<RuleError> for Error {
     fn from(err: RuleError) -> Error {
         Error::BadParseRule(err)
-    }
-}
-
-impl From<regex::Error> for Error {
-    fn from(err: regex::Error) -> Error {
-        Error::FilterRegexError(err)
     }
 }
 
@@ -72,29 +65,13 @@ impl From<chrono::ParseError> for ParseError {
 /// The main part of the Echelon0!
 pub struct Parser<'a> {
     rule: ParseRule<'a>,
-    include: Option<regex::Regex>,
-    exclude: Option<regex::Regex>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(rule: &'a str) -> Result<Parser<'a>, Error> {
         let mut rule_parser = RuleParser::new(rule);
         let rule = try!(rule_parser.parse());
-        Ok(Parser {
-            rule: rule,
-            include: None,
-            exclude: None,
-        })
-    }
-
-    pub fn set_include_filter(&mut self, f: &str) -> Result<(), Error> {
-        self.include = Some(try!(regex::Regex::new(f)));
-        Ok(())
-    }
-
-    pub fn set_exclude_filter(&mut self, f: &str) -> Result<(), Error> {
-        self.exclude = Some(try!(regex::Regex::new(f)));
-        Ok(())
+        Ok(Parser { rule: rule })
     }
 
     pub fn parse_entry<'t>(&self, l: &'t String) -> Result<Entry<'a, 't>, ParseError> {
