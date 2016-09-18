@@ -2,12 +2,15 @@ use rule::{FieldType, ParseRule, RuleParser};
 use rule::Error as RuleError;
 
 use self::chrono::{DateTime, TimeZone, UTC};
+use self::serde::ser::{Serialize, Serializer};
 
 use std::collections::HashMap;
 use std::num;
 
 extern crate chrono;
 extern crate regex;
+extern crate serde;
+extern crate serde_json;
 
 /// Typed value of an entry's field.
 #[derive(Debug, PartialEq)]
@@ -18,6 +21,21 @@ pub enum FieldValue<'t> {
     DateTime(DateTime<UTC>),
     Str(&'t str),
 }
+
+impl<'t> Serialize for FieldValue<'t> {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+        where S: Serializer
+    {
+        match *self {
+            FieldValue::Int(v) => serializer.serialize_i64(v),
+            FieldValue::UInt(v) => serializer.serialize_u64(v),
+            FieldValue::Float(v) => serializer.serialize_f64(v),
+            FieldValue::Str(v) => serializer.serialize_str(v),
+            FieldValue::DateTime(ref v) => serializer.serialize_str(&format!("{}", v)),
+        }
+    }
+}
+
 
 /// Parsed data unit (line, message, whatever).
 pub type Entry<'a, 't> = HashMap<&'a str, FieldValue<'t>>;

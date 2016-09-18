@@ -3,6 +3,8 @@ use parser::Parser;
 use std::io::{BufRead, Write};
 
 extern crate regex;
+extern crate serde;
+extern crate serde_json;
 
 pub struct Echelon0<'a, 'b> {
     input: &'a mut BufRead,
@@ -86,7 +88,7 @@ impl<'a, 'b> Echelon0<'a, 'b> {
 
             match self.parser.parse_entry(&line) {
                 Ok(entry) => {
-                    write!(self.output, "{:?}\n", entry);
+                    write!(self.output, "{}\n", serde_json::to_string(&entry).unwrap());
                 }
                 Err(err) => {
                     println!("{:?}", err); // TODO: log
