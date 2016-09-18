@@ -13,5 +13,6 @@ serde = "0.8"
 serde_json = "0.8"
 
 [dependencies.monstrio]
-version = "0.1"
+version = "0.1.2"
 features = ["glob"]
+# path = "../../crates.rs/monstrio"

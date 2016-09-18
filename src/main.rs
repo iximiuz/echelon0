@@ -65,7 +65,7 @@ fn main() {
     let mut stdin_lock;
     let mut glob_in;
     let input: &mut BufRead = if args.free.len() > 1 {
-        glob_in = monstrio::Input::glob(args.free[1..].into_iter());
+        glob_in = monstrio::Input::glob_with_capacity(4 * 4096, args.free[1..].into_iter());
         glob_in.as_mut()
     } else {
         stdin = io::stdin();
