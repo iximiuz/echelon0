@@ -36,7 +36,6 @@ impl<'t> Serialize for FieldValue<'t> {
     }
 }
 
-
 /// Parsed data unit (line, message, whatever).
 pub type Entry<'a, 't> = HashMap<&'a str, FieldValue<'t>>;
 
