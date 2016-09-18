@@ -54,32 +54,32 @@ fn main() {
         return;
     }
 
-    let parser = match parser::Parser::new(&args.free[0]) { 
-        Ok(p) => p,
-        Err(err) => {
-            println!("Cannot create parser! {:?}", err);
-            return;
-        }
-    };
+    if args.free.len() == 0 {
+        print_usage(&opts, &program);
+        return;
+    }
 
     let stdin;
-    let mut stdin_input;
-    let mut glob_input;
-    let reader: &mut BufRead = if args.free.len() > 1 {
-        glob_input = monstrio::Input::glob(args.free[1..].into_iter());
-        glob_input.as_mut()
+    let mut stdin_lock;
+    let mut glob_in;
+    let input: &mut BufRead = if args.free.len() > 1 {
+        glob_in = monstrio::Input::glob(args.free[1..].into_iter());
+        glob_in.as_mut()
     } else {
         stdin = io::stdin();
-        stdin_input = monstrio::Input::stdin(&stdin);
-        stdin_input.as_mut()
+        stdin_lock = stdin.lock();
+        &mut stdin_lock
     };
+    let stdout = io::stdout();
+    let output = &mut stdout.lock();
 
-    let mut echelon0 = echelon0::Echelon0::new(reader, &parser);
+    let parser = parser::Parser::new(&args.free[0]).unwrap();
+    let mut echelon0 = echelon0::Echelon0::new(input, output, &parser);
     if let Some(ref include) = args.opt_str("i") {
-        echelon0.set_include_filter(include);
+        echelon0.set_include_filter(include).expect("Cannot set include filter");
     }
     if let Some(ref exclude) = args.opt_str("e") {
-        echelon0.set_exclude_filter(exclude);
+        echelon0.set_exclude_filter(exclude).expect("Cannot set exclude filter");
     }
 
     echelon0.start();

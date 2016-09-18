@@ -12,4 +12,3 @@ regex = "0.1"
 [dependencies.monstrio]
 version = "0.1"
 features = ["glob"]
-path = "../../crates.rs/monstrio"

@@ -1,16 +1,18 @@
 use parser::Parser;
 
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 
 extern crate regex;
 
 pub struct Echelon0<'a, 'b> {
-    reader: &'a mut BufRead,
+    input: &'a mut BufRead,
+    output: &'a mut Write,
     parser: &'b Parser<'b>,
     include: Option<regex::Regex>,
     exclude: Option<regex::Regex>,
 }
 
+#[derive(Debug)]
 pub enum Error {
     FiltersConflict,
     BadFilterRegex(regex::Error),
@@ -22,11 +24,14 @@ impl From<regex::Error> for Error {
     }
 }
 
-
 impl<'a, 'b> Echelon0<'a, 'b> {
-    pub fn new(reader: &'a mut BufRead, parser: &'b Parser<'b>) -> Echelon0<'a, 'b> {
+    pub fn new(input: &'a mut BufRead,
+               output: &'a mut Write,
+               parser: &'b Parser<'b>)
+               -> Echelon0<'a, 'b> {
         Echelon0 {
-            reader: reader,
+            input: input,
+            output: output,
             parser: parser,
             include: None,
             exclude: None,
@@ -34,13 +39,17 @@ impl<'a, 'b> Echelon0<'a, 'b> {
     }
 
     pub fn set_include_filter(&mut self, f: &str) -> Result<(), Error> {
-        // TODO: return error if there is an exclude filter already.
+        if self.exclude.is_some() {
+            return Err(Error::FiltersConflict);
+        }
         self.include = Some(try!(regex::Regex::new(f)));
         Ok(())
     }
 
     pub fn set_exclude_filter(&mut self, f: &str) -> Result<(), Error> {
-        // TODO: return error if there is an include filter already.
+        if self.include.is_some() {
+            return Err(Error::FiltersConflict);
+        }
         self.exclude = Some(try!(regex::Regex::new(f)));
         Ok(())
     }
@@ -51,7 +60,7 @@ impl<'a, 'b> Echelon0<'a, 'b> {
             // TODO: Move line reading to the separate function.
             // TODO: add stats fields (read/read_failed/skipped/parsed/parse_failed)
             line.clear();
-            match self.reader.read_line(&mut line) {
+            match self.input.read_line(&mut line) {
                 Ok(n) => {
                     if n == 0 {
                         break;
@@ -77,7 +86,7 @@ impl<'a, 'b> Echelon0<'a, 'b> {
 
             match self.parser.parse_entry(&line) {
                 Ok(entry) => {
-                    println!("{:?}", entry); // TODO: use output
+                    write!(self.output, "{:?}\n", entry);
                 }
                 Err(err) => {
                     println!("{:?}", err); // TODO: log
