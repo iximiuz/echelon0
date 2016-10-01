@@ -297,7 +297,7 @@ impl<'a> RuleScanner<'a> {
     fn scan(&mut self) -> Result<(Token<'a>, usize), ScanError> {
         let ch0 = match self.reader.read_char() {
             Some(c) => c,
-            None => return Ok((Token::EOF, self.reader.pos)), 
+            None => return Ok((Token::EOF, self.reader.pos)),
         };
         let pos = self.reader.pos;
         let token = match ch0 {
@@ -519,7 +519,7 @@ mod tests {
                 assert_eq!("FieldName", expected);
                 assert_eq!(12, pos);
             }
-            _ => unreachable!(), 
+            _ => unreachable!(),
         }
     }
 
@@ -531,7 +531,7 @@ mod tests {
                 assert_eq!(4, captures_count);
                 assert_eq!(2, fields_count);
             }
-            _ => unreachable!(), 
+            _ => unreachable!(),
         }
     }
 
@@ -542,7 +542,7 @@ mod tests {
             Err(Error::NonUniqueFieldName(name)) => {
                 assert_eq!("foo", name);
             }
-            _ => unreachable!(), 
+            _ => unreachable!(),
         }
     }
 

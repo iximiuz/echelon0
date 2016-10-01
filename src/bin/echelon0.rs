@@ -1,22 +1,17 @@
+extern crate env_logger;
+extern crate getopts;
+
+extern crate echelon0;
+extern crate monstrio;
+
 use std::env;
 use std::io;
 use std::io::BufRead;
 use std::process;
 
 use getopts::Options;
-
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-extern crate getopts;
-
-extern crate monstrio;
-
-mod echelon0;
-mod macros;
-mod parser;
-mod rule;
-
+use echelon0::parser::Parser;
+use echelon0::echelon0::Echelon0;
 
 fn print_usage(opts: &Options, program: &String) {
     let brief = format!("Usage: {} parse_rule [glob ...] [-i include_pattern | -e \
@@ -75,8 +70,8 @@ fn main() {
     let stdout = io::stdout();
     let output = &mut stdout.lock();
 
-    let parser = parser::Parser::new(&args.free[0]).unwrap();
-    let mut echelon0 = echelon0::Echelon0::new(input, output, &parser);
+    let parser = Parser::new(&args.free[0]).unwrap();
+    let mut echelon0 = Echelon0::new(input, output, &parser);
     if let Some(ref include) = args.opt_str("i") {
         echelon0.set_include_filter(include).expect("Cannot set include filter");
     }

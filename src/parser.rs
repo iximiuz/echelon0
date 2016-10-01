@@ -86,7 +86,7 @@ impl<'a> Parser<'a> {
                 FieldType::UInt => FieldValue::UInt(try!(val.parse())),
                 FieldType::Float => FieldValue::Float(try!(val.parse())),
                 FieldType::DateTime(format) => try!(self.parse_dt(val, format)),
-                FieldType::Str => FieldValue::Str(val), 
+                FieldType::Str => FieldValue::Str(val),
             };
             entry.insert(field.name, val);
         }
@@ -116,9 +116,11 @@ mod tests {
 
     #[test]
     fn parse_nginx_combined() {
-        let rule = concat!(r#"/([\d\.]+) - (.+) \[(.+)\] "(.+) ([^?]+)\??(.*) HTTP.+" (\d{3}) (\d+) "(.+)" "(.+)"/"#,
-                           " remote_addr,remote_user,time_local:dt[%d/%b/%Y:%H:%M:%S %z]", 
-                           ",method,path,query,status:uint,body_bytes_sent:uint,referrer,user_agent");
+        let rule = concat!(r#"/([\d\.]+) - (.+) \[(.+)\] "(.+) ([^?]+)\??(.*) HTTP.+" "#,
+                           r#"(\d{3}) (\d+) "(.+)" "(.+)"/"#,
+                           " remote_addr,remote_user,time_local:dt[%d/%b/%Y:%H:%M:%S %z]",
+                           ",method,path,query,status:uint,body_bytes_sent:uint,referrer,\
+                            user_agent");
 
         let line = concat!(r#"82.208.100.105 - - [01/Aug/2016:22:59:50 +0000] "#,
                            r#""GET /platforms/sa/apps/115?consumer=portal-ru&user_id=11124493 "#,

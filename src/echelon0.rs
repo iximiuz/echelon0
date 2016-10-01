@@ -1,10 +1,9 @@
-use parser::{Entry, Parser};
-
 use std::io::{BufRead, Write};
 
-extern crate regex;
-extern crate serde;
-extern crate serde_json;
+use regex;
+use serde_json;
+
+use parser::{Entry, Parser};
 
 #[derive(Debug)]
 struct OpStats {
