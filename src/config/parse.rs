@@ -1,6 +1,6 @@
 use std::str;
 
-use nom::multispace;
+use nom::{alphanumeric, multispace};
 
 
 //   rule config
@@ -57,14 +57,25 @@ named!(comments,
 
 named!(blank, map!(many0!(alt!(multispace | comments)), |_| b""));
 
-// named!(double_quoted,
-//        delimited!(tag!("\""),
-//                   map!(many0!(alt!(tag!(r#"\""#) | not!(char!('"')))), |_: Vec<&[u8]>| b""),
-//                   tag!("\"")));
+named!(double_quoted<String>,
+       delimited!(tag!("\""),
+                  fold_many0!(map_res!(alt!(tag!(r#"\""#) | take_until_either!(r#"\""#)),
+                                       str::from_utf8),
+                              String::new(),
+                              |mut acc: String, item| {
+                                if item == r#"\""# {
+                                    acc.push('"');
+                                } else {
+                                    acc.push_str(item);
+                                }
+                                acc
+                            } ),
+                  tag!("\"")));
 
 named!(single_quoted<String>,
        delimited!(tag!("'"),
-                  fold_many0!(map_res!(alt!(tag!(r"\'") | take_until_either!(r"\'")), str::from_utf8),
+                  fold_many0!(map_res!(alt!(tag!(r"\'") | take_until_either!(r"\'")),
+                                       str::from_utf8),
                               String::new(),
                               |mut acc: String, item| {
                                 if item == r"\'" {
@@ -72,21 +83,24 @@ named!(single_quoted<String>,
                                 } else {
                                     acc.push_str(item);
                                 }
-
                                 acc
                             } ),
                   tag!("'")));
 
 
-// named!(string, alt!(single_quoted | double_quoted));
+named!(string<String>, alt!(single_quoted | double_quoted));
 
-// named!(name, alt!(re_bytes_match!("^[-A-Za-z0-9_]+$") | tag!("~")));
+named!(name<String>,
+       alt!(fold_many1!(map_res!(alt!(alphanumeric | tag!("-") | tag!("_")),
+                                 str::from_utf8),
+                        String::new(), |mut acc: String, item| { acc.push_str(item); acc } )
+            | string));
 
 
 #[cfg(test)]
 mod tests {
-    use super::{blank, comments, /* name, string, double_quoted, */ single_quoted};
-    use nom::IResult;
+    use super::{blank, comments, double_quoted, single_quoted, name};
+    use nom::{IResult};
 
     #[test]
     fn test_parse_blank() {
@@ -111,46 +125,37 @@ mod tests {
                    single_quoted(quoted_escaped));
     }
 
-    // #[test]
-    // fn test_parse_double_quoted_string() {
-    //     let quoted = br#""foo bar baz""#;
-    //     assert_eq!(IResult::Done(&b""[..], &b"foo bar baz"[..]),
-    //                double_quoted(quoted));
+    #[test]
+    fn test_parse_double_quoted_string() {
+        let quoted = r#"     "foo bar baz"     "#.trim().as_bytes();
+        assert_eq!(IResult::Done(&b""[..], "foo bar baz".to_string()),
+                   double_quoted(quoted));
 
-    //     let quoted_escaped = br#""foo \"bar\" baz""#;
-    //     assert_eq!(IResult::Done(&b""[..], &br#"foo \"bar\" baz"#[..]),
-    //                double_quoted(quoted_escaped));
-    // }
+        let quoted_escaped = r#"     "foo \"bar\" baz"     "#.trim().as_bytes();
+        assert_eq!(IResult::Done(&b""[..], r#"foo "bar" baz"#.to_string()),
+                   double_quoted(quoted_escaped));
+    }
 
-    // #[test]
-    // fn test_parse_string() {
-    //     let quoted = br#""foo bar baz""#;
-    //     assert_eq!(IResult::Done(&b""[..], &b"foo bar baz"[..]), string(quoted));
+    #[test]
+    fn test_name() {
+        let simple_name = "     example123     ".trim().as_bytes();
+        assert_eq!(IResult::Done(&b""[..], "example123".to_string()),
+                   name(simple_name));
 
-    //     let quoted_escaped = br#""foo \"bar\" baz""#;
-    //     assert_eq!(IResult::Done(&b""[..], &br#"foo \"bar\" baz"#[..]),
-    //                string(quoted_escaped));
+        let dashed_name = "     ex_amp_le-123     ".trim().as_bytes();
+        assert_eq!(IResult::Done(&b""[..], "ex_amp_le-123".to_string()),
+                   name(dashed_name));
 
-    //     let quoted = b"'foo bar baz'";
-    //     assert_eq!(IResult::Done(&b""[..], &b"foo bar baz"[..]), string(quoted));
+        let not_a_name = "     foo&bar     ".trim().as_bytes();
+        assert_eq!(IResult::Done(&b"&bar"[..], "foo".to_string()),
+                   name(not_a_name));
 
-    //     let quoted_escaped = br"'foo \'bar\' baz'";
-    //     assert_eq!(IResult::Done(&b""[..], &br"foo \'bar\' baz"[..]),
-    //                string(quoted_escaped));
-    // }
+        let double_quoted_name = r#"     "foo&bar"     "#.trim().as_bytes();
+        assert_eq!(IResult::Done(&b""[..], "foo&bar".to_string()),
+                   name(double_quoted_name));
 
-    // #[test]
-    // fn test_name() {
-    //     let simple_name = b"example123";
-    //     assert_eq!(IResult::Done(&b""[..], &b"example123"[..]),
-    //                name(simple_name));
-
-    //     let quoted_name = b"\"example123\"";
-    //     assert_eq!(IResult::Done(&b""[..], &b"example123"[..]),
-    //                name(quoted_name));
-
-    //     let quoted_name = b"'example123'";
-    //     assert_eq!(IResult::Done(&b""[..], &b"example123"[..]),
-    //                name(quoted_name));
-    // }
+        let single_quoted_name = "     'foo&bar'     ".trim().as_bytes();
+        assert_eq!(IResult::Done(&b""[..], "foo&bar".to_string()),
+                   name(single_quoted_name));
+    }
 }
