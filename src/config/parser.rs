@@ -2,6 +2,8 @@ use std::str;
 
 use nom::{alphanumeric, multispace};
 
+use super::ast;
+
 
 //   rule config
 //     _ plugin_section _ (_ plugin_section)* _ <LogStash::Config::AST::Config>
@@ -26,29 +28,7 @@ use nom::{alphanumeric, multispace};
 //     "}"
 //     <LogStash::Config::AST::Plugin>
 //   end
-//
-//   rule name
-//     (
-//       ([A-Za-z0-9_-]+ <LogStash::Config::AST::Name>)
-//       / string
-//     )
-//   end
-//
-//   rule double_quoted_string
-//     ( '"' ( '\"' / !'"' . )* '"' <LogStash::Config::AST::String>)
-//   end
-//
-//   rule single_quoted_string
-//     ( "'" ( "\\'" / !"'" . )* "'" <LogStash::Config::AST::String>)
-//   end
-//
-//   rule string
-//     double_quoted_string / single_quoted_string
-//   end
 
-
-// named!(plugin_type,
-//        alt!(tag!("input") | tag!("filter") | tag!("output")));
 
 named!(comments,
        map!(many1!(preceded!(opt!(multispace),
@@ -57,50 +37,84 @@ named!(comments,
 
 named!(blank, map!(many0!(alt!(multispace | comments)), |_| b""));
 
+// named!(plugin_section,
+//        plagin_type);
+
+named!(plugin<ast::Plugin>,
+    do_parse!(
+        name: name >>
+        blank      >>
+        tag!("{")  >>
+        blank      >>
+        tag!("}")  >>
+        (ast::Plugin::new(name))
+    )
+);
+
+named!(plugin_type,
+       alt!(tag!("input") | tag!("filter") | tag!("output")));
+
 named!(double_quoted<String>,
-       delimited!(tag!("\""),
-                  fold_many0!(map_res!(alt!(tag!(r#"\""#) | take_until_either!(r#"\""#)),
-                                       str::from_utf8),
-                              String::new(),
-                              |mut acc: String, item| {
-                                if item == r#"\""# {
-                                    acc.push('"');
-                                } else {
-                                    acc.push_str(item);
-                                }
-                                acc
-                            } ),
-                  tag!("\"")));
+    delimited!(
+        tag!("\""),
+        fold_many0!(
+            map_res!(
+                alt!(tag!(r#"\""#) | take_until_either!(r#"\""#)),
+                str::from_utf8
+            ),
+            String::new(),
+            |mut acc: String, item| {
+                if item == r#"\""# {
+                    acc.push('"');
+                } else {
+                    acc.push_str(item);
+                }
+                acc
+            }
+        ),
+        tag!("\"")
+    )
+);
 
 named!(single_quoted<String>,
-       delimited!(tag!("'"),
-                  fold_many0!(map_res!(alt!(tag!(r"\'") | take_until_either!(r"\'")),
-                                       str::from_utf8),
-                              String::new(),
-                              |mut acc: String, item| {
-                                if item == r"\'" {
-                                    acc.push('\'');
-                                } else {
-                                    acc.push_str(item);
-                                }
-                                acc
-                            } ),
-                  tag!("'")));
-
+    delimited!(
+        tag!("'"),
+        fold_many0!(
+            map_res!(
+                alt!(tag!(r"\'") | take_until_either!(r"\'")),
+                str::from_utf8
+            ),
+            String::new(),
+            |mut acc: String, item| {
+                if item == r"\'" {
+                    acc.push('\'');
+                } else {
+                    acc.push_str(item);
+                }
+                acc
+            }
+        ),
+        tag!("'")
+    )
+);
 
 named!(string<String>, alt!(single_quoted | double_quoted));
 
 named!(name<String>,
-       alt!(fold_many1!(map_res!(alt!(alphanumeric | tag!("-") | tag!("_")),
-                                 str::from_utf8),
-                        String::new(), |mut acc: String, item| { acc.push_str(item); acc } )
-            | string));
+    alt!(
+        fold_many1!(
+            map_res!(alt!(alphanumeric | tag!("-") | tag!("_")), str::from_utf8),
+            String::new(), |mut acc: String, item| { acc.push_str(item); acc }
+        )
+        | string
+    )
+);
 
 
 #[cfg(test)]
 mod tests {
-    use super::{blank, comments, double_quoted, single_quoted, name};
-    use nom::{IResult};
+    use super::*;
+    use nom::IResult;
 
     #[test]
     fn test_parse_blank() {
@@ -157,5 +171,16 @@ mod tests {
         let single_quoted_name = "     'foo&bar'     ".trim().as_bytes();
         assert_eq!(IResult::Done(&b""[..], "foo&bar".to_string()),
                    name(single_quoted_name));
+    }
+
+    #[test]
+    fn test_plugin() {
+        let config = &b"stdin {}"[..];
+        assert_eq!(IResult::Done(&b""[..], ast::Plugin::new("stdin".to_string())),
+                   plugin(config));
+
+        let config = &b"file {\n\n    \n}"[..];
+        assert_eq!(IResult::Done(&b""[..], ast::Plugin::new("file".to_string())),
+                   plugin(config));
     }
 }
