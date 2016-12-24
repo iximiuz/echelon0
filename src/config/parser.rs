@@ -1,9 +1,8 @@
 use std::str;
 
-use nom::{alphanumeric, multispace};
+use nom::{alphanumeric, is_digit, multispace};
 
 use super::ast;
-
 
 //   rule config
 //     _ plugin_section _ (_ plugin_section)* _ <LogStash::Config::AST::Config>
@@ -29,30 +28,120 @@ use super::ast;
 //     <LogStash::Config::AST::Plugin>
 //   end
 
-
-named!(comments,
-       map!(many1!(preceded!(opt!(multispace),
-                             delimited!(tag!("#"), take_until!("\n"), tag!("\n")))),
-            |_| b""));
-
-named!(blank, map!(many0!(alt!(multispace | comments)), |_| b""));
-
 // named!(plugin_section,
 //        plagin_type);
+
+
+named!(plugin_type<ast::PluginType>,
+    alt!(
+        tag!("input")  => { |_| ast::PluginType::Input }
+      | tag!("filter") => { |_| ast::PluginType::Filter }
+      | tag!("output") => { |_| ast::PluginType::Output }
+    )
+);
 
 named!(plugin<ast::Plugin>,
     do_parse!(
         name: name >>
-        blank      >>
+        blank0     >>
         tag!("{")  >>
-        blank      >>
+        blank0     >>  // TODO: attrs
         tag!("}")  >>
         (ast::Plugin::new(name))
     )
 );
 
-named!(plugin_type,
-       alt!(tag!("input") | tag!("filter") | tag!("output")));
+// rule branch
+//   if (_ else_if)* (_ else)?
+//   <LogStash::Config::AST::Branch>
+// end
+// named!(branch<ast::Branch>,
+//     do_parse!(
+//         case_if: case_if >>
+//         // TODO: case_else_if: case_else_if >>
+//         // TODO: case_else: case_else >>
+//         (ast::Branch{})
+//     )
+// );
+
+// rule if
+//     "if" _ condition _ "{" _ (branch_or_plugin _)* "}"
+//     <LogStash::Config::AST::If>
+// end
+
+// named!(case_if<ast::BranchOrPlugin>,
+// );
+
+// rule condition
+//   expression (_ boolean_operator _ expression)*
+//   <LogStash::Config::AST::Condition>
+// end
+// named!(condition<ast::Condition>,
+// );
+
+// rule expression
+//   (
+//       ("(" _ condition _ ")")
+//     / negative_expression
+//     / in_expression
+//     / not_in_expression
+//     / compare_expression
+//     / regexp_expression
+//     / rvalue
+//   ) <LogStash::Config::AST::Expression>
+// end
+
+//  rule boolean_operator
+//    ("and" / "or" / "xor" / "nand")
+//    <LogStash::Config::AST::BooleanOperator>
+//  end
+
+named!(comments,
+    map!(
+        many1!(
+            preceded!(
+                opt!(multispace),
+                delimited!(tag!("#"), take_until!("\n"), tag!("\n"))
+            )
+        ),
+        |_| b""
+    )
+);
+
+named!(blank0, map!(many0!(alt!(multispace | comments)), |_| b""));
+
+// rule number
+//   "-"? [0-9]+ ("." [0-9]*)?
+//   <LogStash::Config::AST::Number>
+// end
+fn parse_f64(minus: Option<&[u8]>, integer: &[u8], fractional: Option<&[u8]>) -> f64 {
+    println!("{:?} {:?} {:?}", minus, integer, fractional);
+    // Since this function is only for internal usage with the `number` parser
+    // we assume that input data is always valid, so we can unwrap() fearlessly.
+    let mut res = String::new();
+    if let Some(_) = minus {
+        res.push('-');
+    }
+
+    res.push_str(str::from_utf8(integer).unwrap());
+    if let Some(f) = fractional {
+        res.push_str(str::from_utf8(f).unwrap());
+    }
+
+    res.parse().unwrap()
+}
+
+named!(fractional, preceded!(tag!("."), take_while!(is_digit)));
+
+named!(number<f64>,
+    do_parse!(
+        minus:      opt!(tag!("-"))        >>
+        integer:    take_while1!(is_digit) >>
+        dot: opt!(tag!("."))               >>
+        // fractional: opt!(take_while!(is_digit)) >>
+        (parse_f64(minus, integer, None))
+    )
+);
 
 named!(double_quoted<String>,
     delimited!(
@@ -110,6 +199,13 @@ named!(name<String>,
     )
 );
 
+// rule rvalue
+//   string / number / selector / array / method_call / regexp
+// end
+// named!(rvalue<ast::Rvalue,
+//     alt!(
+//     )
+// );
 
 #[cfg(test)]
 mod tests {
@@ -117,15 +213,23 @@ mod tests {
     use nom::IResult;
 
     #[test]
-    fn test_parse_blank() {
+    fn test_parse_blank0() {
         let config = include_bytes!("../../tests/assets/config/comments.conf");
-        assert_eq!(IResult::Done(&b"input {}"[..], &b""[..]), blank(config));
+        assert_eq!(IResult::Done(&b"input {}"[..], &b""[..]), blank0(config));
     }
 
     #[test]
     fn test_parse_comments() {
         let config = include_bytes!("../../tests/assets/config/comments.conf");
         assert_eq!(IResult::Done(&b"input {}"[..], &b""[..]), comments(config));
+    }
+
+    #[test]
+    fn test_parse_number() {
+        let valid = vec!["0", "123", "-1", "0.1", "1.5", "1.123", "-0.42"];
+        for x in &valid {
+            assert_eq!(IResult::Done(&b""[..], x.parse().unwrap()), number(x.as_bytes()));
+        }
     }
 
     #[test]
