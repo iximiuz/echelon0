@@ -110,12 +110,16 @@ named!(comments,
 
 named!(blank0, map!(many0!(alt!(multispace | comments)), |_| b""));
 
-// rule number
-//   "-"? [0-9]+ ("." [0-9]*)?
-//   <LogStash::Config::AST::Number>
-// end
+named!(number<f64>,
+    do_parse!(
+        minus:      opt!(tag!("-"))        >>
+        integer:    take_while1!(is_digit) >>
+        fractional: opt!(complete!(preceded!(tag!("."), take_while!(is_digit)))) >>
+        (parse_f64(minus, integer, fractional))
+    )
+);
+
 fn parse_f64(minus: Option<&[u8]>, integer: &[u8], fractional: Option<&[u8]>) -> f64 {
-    println!("{:?} {:?} {:?}", minus, integer, fractional);
     // Since this function is only for internal usage with the `number` parser
     // we assume that input data is always valid, so we can unwrap() fearlessly.
     let mut res = String::new();
@@ -125,23 +129,12 @@ fn parse_f64(minus: Option<&[u8]>, integer: &[u8], fractional: Option<&[u8]>) ->
 
     res.push_str(str::from_utf8(integer).unwrap());
     if let Some(f) = fractional {
+        res.push('.');
         res.push_str(str::from_utf8(f).unwrap());
     }
 
     res.parse().unwrap()
 }
-
-named!(fractional, preceded!(tag!("."), take_while!(is_digit)));
-
-named!(number<f64>,
-    do_parse!(
-        minus:      opt!(tag!("-"))        >>
-        integer:    take_while1!(is_digit) >>
-        dot: opt!(tag!("."))               >>
-        // fractional: opt!(take_while!(is_digit)) >>
-        (parse_f64(minus, integer, None))
-    )
-);
 
 named!(double_quoted<String>,
     delimited!(
@@ -210,7 +203,7 @@ named!(name<String>,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nom::IResult;
+    use nom::{IResult, ErrorKind};
 
     #[test]
     fn test_parse_blank0() {
@@ -226,10 +219,13 @@ mod tests {
 
     #[test]
     fn test_parse_number() {
-        let valid = vec!["0", "123", "-1", "0.1", "1.5", "1.123", "-0.42"];
+        let valid = vec!["0", "123", "-1", "0.", "1.5", "1.123", "-0.42"];
         for x in &valid {
             assert_eq!(IResult::Done(&b""[..], x.parse().unwrap()), number(x.as_bytes()));
         }
+
+        assert_eq!(IResult::Done(&b"abc"[..], -0.123), number(&b"-0.123abc"[..]));
+        assert_eq!(IResult::Error(ErrorKind::TakeWhile1), number(&b"+1"[..]));
     }
 
     #[test]
