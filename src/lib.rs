@@ -3,12 +3,22 @@ extern crate log;
 #[macro_use]
 extern crate nom;
 extern crate regex;
-extern crate serde;
-extern crate serde_json;
-
-pub mod echelon0;
-pub mod parser;
+// extern crate serde;
+// extern crate serde_json;
 
 mod macros;
-mod rule;
 mod config;
+
+pub struct Runner {
+
+}
+
+impl Runner {
+    pub fn new() -> Runner {
+        Runner {}
+    }
+
+    pub fn run(&self) {
+        println!("Hello from Echelon0 runner!");
+    }
+}

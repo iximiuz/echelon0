@@ -127,28 +127,39 @@ fn parse_condition(head: BoolExpr, tail: Vec<(BoolOperator, BoolExpr)>) -> Condi
 //     / rvalue
 //   ) <LogStash::Config::AST::Expression>
 // end
-named!(bool_expr<BoolExpr>,
+
+named!(
+/// Parses an atomic boolean expression.
+///
+/// It is rather an operand for a compound boolean expression (called `condition`), but
+/// it's called `expression` to mimic the original idea from Logstash configs.
+,
+    bool_expr<BoolExpr>,
     alt!(
         rvalue_expr
       | compare_expr
-
-// ("(" _ condition _ ")")
-      | do_parse!(
-            tag!("(")    >>
-            blank0       >>
-            e: bool_expr >>
-            blank0       >>
-            tag!(")")    >>
-            (e)
-        )
+      | parens_expr
     )
 );
 
-named!(rvalue_expr<BoolExpr>,
+
+named!(
+/// Parses a (r)value which will be then converted to a `bool` value.
+///
+/// Does it use `ruby`'s conversions rules?
+,
+    rvalue_expr<BoolExpr>,
     map!(rvalue, |v| BoolExpr::Rvalue(Box::new(v)))
 );
 
-named!(compare_expr<BoolExpr>,
+named!(
+/// Parses a comparison expression.
+///
+/// E.g. `some_var > 42` or `foo == bar`.
+///
+/// Logstash rule: `rvalue _ compare_operator _ rvalue`.
+,
+    compare_expr<BoolExpr>,
     do_parse!(
         lhs: rvalue          >>
         opt!(blank0)         >>
@@ -156,6 +167,24 @@ named!(compare_expr<BoolExpr>,
         opt!(blank0)         >>
         rhs: rvalue          >>
         (BoolExpr::Compare(op, Box::new(lhs), Box::new(rhs)))
+    )
+);
+
+named!(
+/// Parses a parenthesized and maybe compound boolean expression (i.e. `condition`).
+///
+/// E.g. `('foo' in ['foo', 'bar'] and 5 > 6)`.
+///
+/// Logstash rule: `"(" _ condition _ ")"`.
+,
+    parens_expr<BoolExpr>,
+    do_parse!(
+        tag!("(")    >>
+        blank0       >>
+        c: condition >>
+        blank0       >>
+        tag!(")")    >>
+        (BoolExpr::Parens(Box::new(c)))
     )
 );
 
@@ -173,8 +202,10 @@ named!(comments,
 
 named!(blank0, map!(many0!(alt!(multispace | comments)), |_| b""));
 
+named!(
 /// Parses numbers in form \d+(\.\d*)? and produces a float value.
-named!(number<f64>,
+,
+    number<f64>,
     do_parse!(
         minus:      opt!(tag!("-"))        >>
         integer:    take_while1!(is_digit) >>
@@ -200,8 +231,11 @@ fn parse_f64(minus: Option<&[u8]>, integer: &[u8], fractional: Option<&[u8]>) ->
     res.parse().unwrap()
 }
 
+named!(
 /// Parses strings (double or single quoted).
-named!(string<String>, alt!(single_quoted | double_quoted));
+,
+    string<String>, alt!(single_quoted | double_quoted)
+);
 
 named!(double_quoted<String>,
     delimited!(
