@@ -32,6 +32,39 @@ pub enum BranchOrPlugin {
     Plugin(Plugin),
 }
 
-pub struct Condition {
+#[derive(Debug, PartialEq)]
+pub enum BoolOperator {
+    And,
+    Or,
+    Xor,
+    Nand,
+}
 
+#[derive(Debug, PartialEq)]
+pub enum CompareOperator {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Condition {
+    Leaf(Box<BoolExpr>),
+    Branch(BoolOperator, Box<Condition>, Box<Condition>),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BoolExpr {
+    Parens(Box<Condition>),
+    Compare(CompareOperator, Box<Rvalue>, Box<Rvalue>),
+    Rvalue(Box<Rvalue>),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Rvalue {
+    String(String),
+    Number(f64),
 }

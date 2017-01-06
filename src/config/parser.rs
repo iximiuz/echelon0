@@ -2,7 +2,7 @@ use std::str;
 
 use nom::{alphanumeric, is_digit, multispace};
 
-use super::ast;
+use super::ast::*;
 
 //   rule config
 //     _ plugin_section _ (_ plugin_section)* _ <LogStash::Config::AST::Config>
@@ -19,6 +19,15 @@ use super::ast;
 //     branch / plugin
 //   end
 //
+
+named!(plugin_type<PluginType>,
+    alt!(
+        tag!("input")  => { |_| PluginType::Input  }
+      | tag!("filter") => { |_| PluginType::Filter }
+      | tag!("output") => { |_| PluginType::Output }
+    )
+);
+
 //   rule plugin
 //     name _ "{"
 //       _
@@ -27,27 +36,14 @@ use super::ast;
 //     "}"
 //     <LogStash::Config::AST::Plugin>
 //   end
-
-// named!(plugin_section,
-//        plagin_type);
-
-
-named!(plugin_type<ast::PluginType>,
-    alt!(
-        tag!("input")  => { |_| ast::PluginType::Input }
-      | tag!("filter") => { |_| ast::PluginType::Filter }
-      | tag!("output") => { |_| ast::PluginType::Output }
-    )
-);
-
-named!(plugin<ast::Plugin>,
+named!(plugin<Plugin>,
     do_parse!(
         name: name >>
         blank0     >>
         tag!("{")  >>
         blank0     >>  // TODO: attrs
         tag!("}")  >>
-        (ast::Plugin::new(name))
+        (Plugin::new(name))
     )
 );
 
@@ -55,12 +51,12 @@ named!(plugin<ast::Plugin>,
 //   if (_ else_if)* (_ else)?
 //   <LogStash::Config::AST::Branch>
 // end
-// named!(branch<ast::Branch>,
+// named!(branch<Branch>,
 //     do_parse!(
 //         case_if: case_if >>
 //         // TODO: case_else_if: case_else_if >>
 //         // TODO: case_else: case_else >>
-//         (ast::Branch{})
+//         (Branch{})
 //     )
 // );
 
@@ -69,15 +65,56 @@ named!(plugin<ast::Plugin>,
 //     <LogStash::Config::AST::If>
 // end
 
-// named!(case_if<ast::BranchOrPlugin>,
+// named!(case_if<BranchOrPlugin>,
 // );
 
-// rule condition
-//   expression (_ boolean_operator _ expression)*
-//   <LogStash::Config::AST::Condition>
+// rule else_if
+//   "else" _ "if" _ condition _ "{" _ ( branch_or_plugin _)* "}"
+//   <LogStash::Config::AST::Elsif>
 // end
-// named!(condition<ast::Condition>,
-// );
+
+// rule else
+//   "else" _ "{" _ (branch_or_plugin _)* "}"
+//   <LogStash::Config::AST::Else>
+// end
+
+named!(bool_operator<BoolOperator>,
+    alt!(
+        tag!("and")  => { |_| BoolOperator::And  }
+      | tag!("or")   => { |_| BoolOperator::Or   }
+      | tag!("xor")  => { |_| BoolOperator::Xor  }
+      | tag!("nand") => { |_| BoolOperator::Nand }
+    )
+);
+
+named!(compare_operator<CompareOperator>,
+    alt!(
+        tag!("==") => { |_| CompareOperator::Eq }
+      | tag!("!=") => { |_| CompareOperator::Ne }
+      | tag!("<=") => { |_| CompareOperator::Le }
+      | tag!(">=") => { |_| CompareOperator::Ge }
+      | tag!("<")  => { |_| CompareOperator::Lt }
+      | tag!(">")  => { |_| CompareOperator::Gt }
+    )
+);
+
+// bool_expr (_ bool_operator _ bool_expr)+
+named!(condition<Condition>,
+    do_parse!(
+        head: bool_expr >>
+        tail: many1!(
+            tuple!(
+                delimited!(blank0, bool_operator, blank0),
+                bool_expr
+            )
+        ) >>
+        (parse_condition(head, tail))
+    )
+);
+
+fn parse_condition(head: BoolExpr, tail: Vec<(BoolOperator, BoolExpr)>) -> Condition {
+    Condition::Leaf(Box::new(head))
+}
 
 // rule expression
 //   (
@@ -90,11 +127,37 @@ named!(plugin<ast::Plugin>,
 //     / rvalue
 //   ) <LogStash::Config::AST::Expression>
 // end
+named!(bool_expr<BoolExpr>,
+    alt!(
+        rvalue_expr
+      | compare_expr
 
-//  rule boolean_operator
-//    ("and" / "or" / "xor" / "nand")
-//    <LogStash::Config::AST::BooleanOperator>
-//  end
+// ("(" _ condition _ ")")
+      | do_parse!(
+            tag!("(")    >>
+            blank0       >>
+            e: bool_expr >>
+            blank0       >>
+            tag!(")")    >>
+            (e)
+        )
+    )
+);
+
+named!(rvalue_expr<BoolExpr>,
+    map!(rvalue, |v| BoolExpr::Rvalue(Box::new(v)))
+);
+
+named!(compare_expr<BoolExpr>,
+    do_parse!(
+        lhs: rvalue          >>
+        opt!(blank0)         >>
+        op: compare_operator >>
+        opt!(blank0)         >>
+        rhs: rvalue          >>
+        (BoolExpr::Compare(op, Box::new(lhs), Box::new(rhs)))
+    )
+);
 
 named!(comments,
     map!(
@@ -110,6 +173,7 @@ named!(comments,
 
 named!(blank0, map!(many0!(alt!(multispace | comments)), |_| b""));
 
+/// Parses numbers in form \d+(\.\d*)? and produces a float value.
 named!(number<f64>,
     do_parse!(
         minus:      opt!(tag!("-"))        >>
@@ -135,6 +199,9 @@ fn parse_f64(minus: Option<&[u8]>, integer: &[u8], fractional: Option<&[u8]>) ->
 
     res.parse().unwrap()
 }
+
+/// Parses strings (double or single quoted).
+named!(string<String>, alt!(single_quoted | double_quoted));
 
 named!(double_quoted<String>,
     delimited!(
@@ -180,8 +247,6 @@ named!(single_quoted<String>,
     )
 );
 
-named!(string<String>, alt!(single_quoted | double_quoted));
-
 named!(name<String>,
     alt!(
         fold_many1!(
@@ -195,10 +260,13 @@ named!(name<String>,
 // rule rvalue
 //   string / number / selector / array / method_call / regexp
 // end
-// named!(rvalue<ast::Rvalue,
-//     alt!(
-//     )
-// );
+named!(rvalue<Rvalue>,
+    alt!(
+        string => { |v| Rvalue::String(v) }
+      | number => { |v| Rvalue::Number(v) }
+// TODO: add remaining cases
+    )
+);
 
 #[cfg(test)]
 mod tests {
@@ -274,13 +342,30 @@ mod tests {
     }
 
     #[test]
+    fn test_rvalue() {
+        assert_eq!(IResult::Done(&b""[..], Rvalue::Number(123.0)),
+                   rvalue(&b"123"[..]));
+
+        assert_eq!(IResult::Done(&b""[..], Rvalue::String("foobar".to_string())),
+                   rvalue(&b"'foobar'"[..]));
+        // TODO: selector, array, method_call, regexp
+    }
+
+    #[test]
     fn test_plugin() {
         let config = &b"stdin {}"[..];
-        assert_eq!(IResult::Done(&b""[..], ast::Plugin::new("stdin".to_string())),
+        assert_eq!(IResult::Done(&b""[..], Plugin::new("stdin".to_string())),
                    plugin(config));
 
         let config = &b"file {\n\n    \n}"[..];
-        assert_eq!(IResult::Done(&b""[..], ast::Plugin::new("file".to_string())),
+        assert_eq!(IResult::Done(&b""[..], Plugin::new("file".to_string())),
                    plugin(config));
+    }
+
+    #[test]
+    fn test_bool_expr() {
+        assert_eq!(IResult::Done(&b""[..],
+                   BoolExpr::Rvalue(Box::new(Rvalue::Number(1.0)))),
+                   bool_expr(&b"1"[..]));
     }
 }
