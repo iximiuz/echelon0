@@ -407,7 +407,16 @@ mod tests {
 
         assert_eq!(IResult::Done(&b""[..], Rvalue::from("foobar".to_string())),
                    rvalue(&b"'foobar'"[..]));
-        // TODO: selector, array, method_call, regexp
+
+        let sel = Selector::new(vec!["foo".to_string()]);
+        assert_eq!(IResult::Done(&b""[..], Rvalue::from(sel)),
+                   rvalue(&b"[foo]"[..]));
+
+        let sel = Selector::new(vec!["foo".to_string(), "bar".to_string()]);
+        assert_eq!(IResult::Done(&b""[..], Rvalue::from(sel)),
+                   rvalue(&b"[foo][bar]"[..]));
+
+        // TODO: array, method_call, regexp
     }
 
     #[test]
