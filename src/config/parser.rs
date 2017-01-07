@@ -116,18 +116,6 @@ fn parse_condition(head: BoolExpr, tail: Vec<(BoolOperator, BoolExpr)>) -> Condi
     Condition::Leaf(Box::new(head))
 }
 
-// rule expression
-//   (
-//       ("(" _ condition _ ")")
-//     / negative_expression
-//     / in_expression
-//     / not_in_expression
-//     / compare_expression
-//     / regexp_expression
-//     / rvalue
-//   ) <LogStash::Config::AST::Expression>
-// end
-
 named!(
 /// Parses an atomic boolean expression.
 ///
@@ -136,10 +124,13 @@ named!(
 ,
     bool_expr<BoolExpr>,
     alt!(
-        rvalue_expr
-      | compare_expr
-      | parens_expr
-      | negative_expr
+        complete!(parens_expr)
+      | complete!(negative_expr)
+// TODO: in_expr
+// TODO: not_in_expr
+      | complete!(compare_expr)
+// TODO: re_expr
+      | complete!(rvalue_expr)
     )
 );
 
@@ -420,6 +411,38 @@ mod tests {
     }
 
     #[test]
+    fn test_bool_expr_rvalue() {
+        assert_eq!(IResult::Done(&b""[..], BoolExpr::from(Rvalue::from(1.0))),
+                   bool_expr(&b"1"[..]));
+    }
+
+    #[test]
+    fn test_bool_expr_compare() {
+        // TODO: for each compare operator { .. }
+        let expr = BoolExpr::Compare(CompareOperator::Gt,
+                                     Box::new(Rvalue::from(1.0)),
+                                     Box::new(Rvalue::from(0.0)));
+        assert_eq!(IResult::Done(&b""[..], expr),
+                   bool_expr(&b"1 > 0"[..]));
+
+        // TODO: test other rvalues
+    }
+
+    // TODO:
+    // #[test]
+    // fn test_bool_expr_parens() {
+    //     assert_eq!(IResult::Done(&b""[..], BoolExpr::from(Rvalue::from(1.0))),
+    //                bool_expr(&b"1"[..]));
+    // }
+
+    // TODO:
+    // #[test]
+    // fn test_bool_expr_negative() {
+    //     assert_eq!(IResult::Done(&b""[..], BoolExpr::from(Rvalue::from(1.0))),
+    //                bool_expr(&b"1"[..]));
+    // }
+
+    #[test]
     fn test_plugin() {
         let config = &b"stdin {}"[..];
         assert_eq!(IResult::Done(&b""[..], Plugin::new("stdin".to_string())),
@@ -428,12 +451,5 @@ mod tests {
         let config = &b"file {\n\n    \n}"[..];
         assert_eq!(IResult::Done(&b""[..], Plugin::new("file".to_string())),
                    plugin(config));
-    }
-
-    #[test]
-    fn test_bool_expr() {
-        assert_eq!(IResult::Done(&b""[..],
-                   BoolExpr::from(Rvalue::from(1.0))),
-                   bool_expr(&b"1"[..]));
     }
 }
