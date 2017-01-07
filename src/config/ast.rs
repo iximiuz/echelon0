@@ -59,12 +59,55 @@ pub enum Condition {
 #[derive(Debug, PartialEq)]
 pub enum BoolExpr {
     Parens(Box<Condition>),
-    Compare(CompareOperator, Box<Rvalue>, Box<Rvalue>),
     Rvalue(Box<Rvalue>),
+    Negative(Box<BoolExpr>),
+    Compare(CompareOperator, Box<Rvalue>, Box<Rvalue>),
+}
+
+impl BoolExpr {
+    pub fn not(self) -> BoolExpr {
+        BoolExpr::Negative(Box::new(self))
+    }
+}
+
+impl From<Rvalue> for BoolExpr {
+    fn from(v: Rvalue) -> BoolExpr {
+        BoolExpr::Rvalue(Box::new(v))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Selector {
+    elements: Vec<String>,
+}
+
+impl Selector {
+    pub fn new(elements: Vec<String>) -> Selector {
+        Selector { elements: elements }
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Rvalue {
-    String(String),
     Number(f64),
+    String(String),
+    Selector(Selector),
+}
+
+impl From<f64> for Rvalue {
+    fn from(v: f64) -> Self {
+        Rvalue::Number(v)
+    }
+}
+
+impl From<String> for Rvalue {
+    fn from(v: String) -> Self {
+        Rvalue::String(v)
+    }
+}
+
+impl From<Selector> for Rvalue {
+    fn from(v: Selector) -> Self {
+        Rvalue::Selector(v)
+    }
 }

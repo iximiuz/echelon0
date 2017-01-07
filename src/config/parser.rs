@@ -139,6 +139,7 @@ named!(
         rvalue_expr
       | compare_expr
       | parens_expr
+      | negative_expr
     )
 );
 
@@ -185,6 +186,17 @@ named!(
         blank0       >>
         tag!(")")    >>
         (BoolExpr::Parens(Box::new(c)))
+    )
+);
+
+named!(
+    negative_expr<BoolExpr>,
+    preceded!(
+        preceded!(tag!("!"), blank0),
+        alt!(
+            parens_expr => { |expr: BoolExpr| expr.not() }
+          | selector    => { |sel| BoolExpr::from(Rvalue::from(sel)).not() }
+        )
     )
 );
 
@@ -291,13 +303,26 @@ named!(name<String>,
     )
 );
 
+named!(selector<Selector>,
+    map!(
+        many1!(
+            map_res!(
+                delimited!(tag!("["), take_until_either!("],"), tag!("]")),
+                str::from_utf8
+            )
+        ),
+        { |elems: Vec<&str>| Selector::new(elems.iter().map(|e| e.to_string()).collect()) }
+    )
+);
+
 // rule rvalue
 //   string / number / selector / array / method_call / regexp
 // end
 named!(rvalue<Rvalue>,
     alt!(
-        string => { |v| Rvalue::String(v) }
-      | number => { |v| Rvalue::Number(v) }
+        number   => { |v| Rvalue::from(v) }
+      | string   => { |v| Rvalue::from(v) }
+      | selector => { |v| Rvalue::from(v) }
 // TODO: add remaining cases
     )
 );
@@ -377,10 +402,10 @@ mod tests {
 
     #[test]
     fn test_rvalue() {
-        assert_eq!(IResult::Done(&b""[..], Rvalue::Number(123.0)),
+        assert_eq!(IResult::Done(&b""[..], Rvalue::from(123.0)),
                    rvalue(&b"123"[..]));
 
-        assert_eq!(IResult::Done(&b""[..], Rvalue::String("foobar".to_string())),
+        assert_eq!(IResult::Done(&b""[..], Rvalue::from("foobar".to_string())),
                    rvalue(&b"'foobar'"[..]));
         // TODO: selector, array, method_call, regexp
     }
@@ -399,7 +424,7 @@ mod tests {
     #[test]
     fn test_bool_expr() {
         assert_eq!(IResult::Done(&b""[..],
-                   BoolExpr::Rvalue(Box::new(Rvalue::Number(1.0)))),
+                   BoolExpr::from(Rvalue::from(1.0))),
                    bool_expr(&b"1"[..]));
     }
 }
