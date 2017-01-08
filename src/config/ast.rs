@@ -32,12 +32,19 @@ pub enum BranchOrPlugin {
     Plugin(Plugin),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BoolOperator {
     And,
     Or,
-    Xor,
-    Nand,
+}
+
+impl BoolOperator {
+    pub fn precedence(&self) -> i32 {
+        match *self {
+            BoolOperator::Or => 100,
+            BoolOperator::And => 200,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -70,10 +77,16 @@ pub enum Condition {
     Branch(BoolOperator, Box<Condition>, Box<Condition>),
 }
 
+impl From<BoolExpr> for Condition {
+    fn from(v: BoolExpr) -> Condition {
+        Condition::Leaf(Box::new(v))
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum BoolExpr {
     Parens(Box<Condition>),
-    Negative(Box<BoolExpr>),  // TODO: maybe use Condition instead of BoolExpr here?
+    Negative(Box<BoolExpr>), // TODO: maybe use Condition instead of BoolExpr here?
     Compare(CompareOperator, Box<Rvalue>, Box<Rvalue>),
     Rvalue(Box<Rvalue>),
 }

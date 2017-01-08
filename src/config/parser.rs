@@ -80,10 +80,8 @@ named!(plugin<Plugin>,
 
 named!(bool_operator<BoolOperator>,
     alt!(
-        tag!("and")  => { |_| BoolOperator::And  }
-      | tag!("or")   => { |_| BoolOperator::Or   }
-      | tag!("xor")  => { |_| BoolOperator::Xor  }
-      | tag!("nand") => { |_| BoolOperator::Nand }
+        tag!("and")  => { |_| BoolOperator::And }
+      | tag!("or")   => { |_| BoolOperator::Or  }
     )
 );
 
@@ -108,12 +106,52 @@ named!(condition<Condition>,
                 bool_expr
             )
         ) >>
-        (parse_condition(head, tail))
+        (parse_condition(Condition::from(head), tail))
     )
 );
 
-fn parse_condition(head: BoolExpr, tail: Vec<(BoolOperator, BoolExpr)>) -> Condition {
-    Condition::Leaf(Box::new(head))
+/// Parses compound conditions.
+///
+/// To deal with boolean operators precedences the algorithm reassembles
+/// the last node instead of doing one-step look ahead.
+///
+/// Trying to build a tree from the next cases:
+///
+/// ```rust,ignore
+/// a && b
+/// a || b
+/// a && b || c
+/// a || b && c
+/// a && b && c
+/// a || b && c || d
+/// a && b || c && d
+/// ```
+fn parse_condition(head: Condition, tail: Vec<(BoolOperator, BoolExpr)>) -> Condition {
+    let mut cond = head;
+
+    for part in tail {
+        let next_op = part.0;
+        let next_expr = Box::new(Condition::from(part.1));
+
+        cond = match cond {
+            Condition::Leaf(_) => Condition::Branch(next_op, Box::new(cond), next_expr),
+            Condition::Branch(op, lhs, rhs) => {
+                if op.precedence() >= next_op.precedence() {
+                    // Wrap
+                    Condition::Branch(next_op,
+                                      Box::new(Condition::Branch(op, lhs, rhs)), // reassemble cond
+                                      next_expr)
+                } else {
+                    // Unwrap and rewrap
+                    Condition::Branch(op,
+                                      lhs,
+                                      Box::new(Condition::Branch(next_op, rhs, next_expr)))
+                }
+            }
+        };
+    }
+
+    cond
 }
 
 named!(
@@ -415,6 +453,65 @@ mod tests {
     }
 
     #[test]
+    fn test_condition_leaf() {
+        let expr = bool_expr(&b"1 > 2"[..]).unwrap().1;
+        let cond = Condition::from(expr);
+        assert_eq!(IResult::Done(&b""[..], cond),
+                   condition(&b"1 > 2"[..]));
+    }
+
+    #[test]
+    fn test_condition_branch() {
+        let expr1 = bool_expr(&b"1 > 2"[..]).unwrap().1;
+        let expr2 = bool_expr(&b"'foo' != 'bar'"[..]).unwrap().1;
+        let op = bool_operator(&b"and"[..]).unwrap().1;
+        let cond = Condition::Branch(op,
+                                     Box::new(Condition::from(expr1)),
+                                     Box::new(Condition::from(expr2)));
+        assert_eq!(IResult::Done(&b""[..], cond),
+                   condition(&b"1 > 2 and 'foo' != 'bar'"[..]));
+    }
+
+    #[test]
+    fn test_condition_compound_1() {
+        let expr1 = bool_expr(&b"1 > 2"[..]).unwrap().1;
+        let expr2 = bool_expr(&b"'foo' != 'bar'"[..]).unwrap().1;
+        let expr3 = bool_expr(&b"42 == [sel]"[..]).unwrap().1;
+        let op_and = bool_operator(&b"and"[..]).unwrap().1;
+        let op_or = bool_operator(&b"or"[..]).unwrap().1;
+
+        let cond = Condition::Branch(op_or,
+                                     Box::new(Condition::Branch(op_and,
+                                                                Box::new(Condition::from(expr1)),
+                                                                Box::new(Condition::from(expr2)))),
+                                     Box::new(Condition::from(expr3)));
+        assert_eq!(IResult::Done(&b""[..], cond),
+                   condition(&b"1 > 2 and 'foo' != 'bar' or 42 == [sel]"[..]));
+    }
+
+    #[test]
+    fn test_condition_compound_2() {
+        let expr1 = bool_expr(&b"1 > 2"[..]).unwrap().1;
+        let expr2 = bool_expr(&b"'foo' != 'bar'"[..]).unwrap().1;
+        let expr3 = bool_expr(&b"42 == [sel]"[..]).unwrap().1;
+        let op_and = bool_operator(&b"and"[..]).unwrap().1;
+        let op_or = bool_operator(&b"or"[..]).unwrap().1;
+        let cond = Condition::Branch(op_or,
+                                     Box::new(Condition::from(expr1)),
+                                     Box::new(Condition::Branch(op_and,
+                                                                Box::new(Condition::from(expr2)),
+                                                                Box::new(Condition::from(expr3)))));
+        assert_eq!(IResult::Done(&b""[..], cond),
+                   condition(&b"1 > 2 or 'foo' != 'bar' and 42 == [sel]"[..]));
+    }
+
+    // TODO: #[test]
+    // fn test_condition_compound_3() {
+    //     // a && b || c && d
+    //     // a || b && c || d
+    // }
+
+    #[test]
     fn test_bool_expr_rvalue() {
         assert_eq!(IResult::Done(&b""[..], BoolExpr::from(Rvalue::from(1.0))),
                    bool_expr(&b"1"[..]));
@@ -455,13 +552,11 @@ mod tests {
         let expr =
             BoolExpr::Parens(
                 Box::new(
-                    Condition::Leaf(
-                        Box::new(
-                            BoolExpr::Compare(
-                                CompareOperator::Gt,
-                                Box::new(Rvalue::from(1.0)),
-                                Box::new(Rvalue::from(2.0))
-                            )
+                    Condition::from(
+                        BoolExpr::Compare(
+                            CompareOperator::Gt,
+                            Box::new(Rvalue::from(1.0)),
+                            Box::new(Rvalue::from(2.0))
                         )
                     )
                 )
@@ -476,13 +571,11 @@ mod tests {
         let expr =
             BoolExpr::Parens(
                 Box::new(
-                    Condition::Leaf(
-                        Box::new(
-                            BoolExpr::Compare(
-                                CompareOperator::Gt,
-                                Box::new(Rvalue::from(1.0)),
-                                Box::new(Rvalue::from(2.0))
-                            )
+                    Condition::from(
+                        BoolExpr::Compare(
+                            CompareOperator::Gt,
+                            Box::new(Rvalue::from(1.0)),
+                            Box::new(Rvalue::from(2.0))
                         )
                     )
                 )
