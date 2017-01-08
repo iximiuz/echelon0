@@ -96,8 +96,27 @@ named!(compare_operator<CompareOperator>,
     )
 );
 
-// bool_expr (_ bool_operator _ bool_expr)*
-named!(condition<Condition>,
+named!(
+/// Parses compound conditions.
+///
+/// Internally, to deal with boolean operators precedences the algorithm
+/// reassembles the last node instead of doing one-step look ahead.
+///
+/// Trying to build a tree from the next cases:
+///
+/// ```bash
+/// a && b
+/// a || b
+/// a && b || c
+/// a || b && c
+/// a && b && c
+/// a || b && c || d
+/// a && b || c && d
+/// ```
+///
+/// Logstash rule: `expression (_ boolean_operator _ expression)*`.
+,
+    condition<Condition>,
     do_parse!(
         head: bool_expr >>
         tail: many0!(
@@ -110,22 +129,6 @@ named!(condition<Condition>,
     )
 );
 
-/// Parses compound conditions.
-///
-/// To deal with boolean operators precedences the algorithm reassembles
-/// the last node instead of doing one-step look ahead.
-///
-/// Trying to build a tree from the next cases:
-///
-/// ```rust,ignore
-/// a && b
-/// a || b
-/// a && b || c
-/// a || b && c
-/// a && b && c
-/// a || b && c || d
-/// a && b || c && d
-/// ```
 fn parse_condition(head: Condition, tail: Vec<(BoolOperator, BoolExpr)>) -> Condition {
     let mut cond = head;
 
