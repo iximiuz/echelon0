@@ -73,9 +73,9 @@ pub enum Condition {
 #[derive(Debug, PartialEq)]
 pub enum BoolExpr {
     Parens(Box<Condition>),
-    Rvalue(Box<Rvalue>),
-    Negative(Box<BoolExpr>),
+    Negative(Box<BoolExpr>),  // TODO: maybe use Condition instead of BoolExpr here?
     Compare(CompareOperator, Box<Rvalue>, Box<Rvalue>),
+    Rvalue(Box<Rvalue>),
 }
 
 impl BoolExpr {

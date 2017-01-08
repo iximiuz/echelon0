@@ -98,11 +98,11 @@ named!(compare_operator<CompareOperator>,
     )
 );
 
-// bool_expr (_ bool_operator _ bool_expr)+
+// bool_expr (_ bool_operator _ bool_expr)*
 named!(condition<Condition>,
     do_parse!(
         head: bool_expr >>
-        tail: many1!(
+        tail: many0!(
             tuple!(
                 delimited!(blank0, bool_operator, blank0),
                 bool_expr
@@ -134,14 +134,35 @@ named!(
     )
 );
 
+named!(
+/// Parses a parenthesized and maybe compound boolean expression (i.e. `condition`).
+///
+/// E.g. `('foo' in ['foo', 'bar'] and 5 > 6)`.
+///
+/// Logstash rule: `"(" _ condition _ ")"`.
+,
+    parens_expr<BoolExpr>,
+    do_parse!(
+        tag!("(")    >>
+        blank0       >>
+        c: condition >>
+        blank0       >>
+        tag!(")")    >>
+        (BoolExpr::Parens(Box::new(c)))
+    )
+);
 
 named!(
-/// Parses a (r)value which will be then converted to a `bool` value.
-///
-/// Does it use `ruby`'s conversions rules?
+/// Parses either `!<parenthesized expr>` or `!<selector expr>`.
 ,
-    rvalue_expr<BoolExpr>,
-    map!(rvalue, |v| BoolExpr::Rvalue(Box::new(v)))
+    negative_expr<BoolExpr>,
+    preceded!(
+        preceded!(tag!("!"), blank0),
+        alt!(
+            parens_expr => { |expr: BoolExpr| expr.not() }
+          | selector    => { |sel| BoolExpr::from(Rvalue::from(sel)).not() }
+        )
+    )
 );
 
 named!(
@@ -163,35 +184,18 @@ named!(
 );
 
 named!(
-/// Parses a parenthesized and maybe compound boolean expression (i.e. `condition`).
+/// Parses a (r)value which will be then converted to a `bool` value.
 ///
-/// E.g. `('foo' in ['foo', 'bar'] and 5 > 6)`.
-///
-/// Logstash rule: `"(" _ condition _ ")"`.
+/// Does it use `ruby`'s conversions rules?
 ,
-    parens_expr<BoolExpr>,
-    do_parse!(
-        tag!("(")    >>
-        blank0       >>
-        c: condition >>
-        blank0       >>
-        tag!(")")    >>
-        (BoolExpr::Parens(Box::new(c)))
-    )
+    rvalue_expr<BoolExpr>,
+    map!(rvalue, |v| BoolExpr::Rvalue(Box::new(v)))
 );
 
 named!(
-    negative_expr<BoolExpr>,
-    preceded!(
-        preceded!(tag!("!"), blank0),
-        alt!(
-            parens_expr => { |expr: BoolExpr| expr.not() }
-          | selector    => { |sel| BoolExpr::from(Rvalue::from(sel)).not() }
-        )
-    )
-);
-
-named!(comments,
+/// Consumes multiline comments and replaces them with an empty value.
+,
+    comments,
     map!(
         many1!(
             preceded!(
@@ -445,19 +449,52 @@ mod tests {
         }
     }
 
-    // TODO:
-    // #[test]
-    // fn test_bool_expr_parens() {
-    //     assert_eq!(IResult::Done(&b""[..], BoolExpr::from(Rvalue::from(1.0))),
-    //                bool_expr(&b"1"[..]));
-    // }
+    #[test]
+    fn test_bool_expr_parens() {
+        // TODO: add test cases.
+        let expr =
+            BoolExpr::Parens(
+                Box::new(
+                    Condition::Leaf(
+                        Box::new(
+                            BoolExpr::Compare(
+                                CompareOperator::Gt,
+                                Box::new(Rvalue::from(1.0)),
+                                Box::new(Rvalue::from(2.0))
+                            )
+                        )
+                    )
+                )
+            );
+        assert_eq!(IResult::Done(&b""[..], expr),
+                   bool_expr(&b"(1 > 2)"[..]));
+    }
 
-    // TODO:
-    // #[test]
-    // fn test_bool_expr_negative() {
-    //     assert_eq!(IResult::Done(&b""[..], BoolExpr::from(Rvalue::from(1.0))),
-    //                bool_expr(&b"1"[..]));
-    // }
+    #[test]
+    fn test_bool_expr_negative() {
+        // not (some parens expr or condition)
+        let expr =
+            BoolExpr::Parens(
+                Box::new(
+                    Condition::Leaf(
+                        Box::new(
+                            BoolExpr::Compare(
+                                CompareOperator::Gt,
+                                Box::new(Rvalue::from(1.0)),
+                                Box::new(Rvalue::from(2.0))
+                            )
+                        )
+                    )
+                )
+            ).not();
+        assert_eq!(IResult::Done(&b""[..], expr),
+                   bool_expr(&b"!(1 > 2)"[..]));
+
+        // not selector
+        let expr = bool_expr(&b"[foo][bar]"[..]).unwrap().1.not();
+        assert_eq!(IResult::Done(&b""[..], expr),
+                   bool_expr(&b"![foo][bar]"[..]));
+    }
 
     #[test]
     fn test_plugin() {
