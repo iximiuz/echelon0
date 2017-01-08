@@ -40,7 +40,7 @@ pub enum BoolOperator {
     Nand,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CompareOperator {
     Eq,
     Ne,
@@ -48,6 +48,20 @@ pub enum CompareOperator {
     Gt,
     Le,
     Ge,
+}
+
+impl CompareOperator {
+    pub fn to_string(&self) -> &'static str {
+        use self::CompareOperator::*;
+        match *self {
+            Eq => "==",
+            Ne => "!=",
+            Lt => "<",
+            Gt => ">",
+            Le => "<=",
+            Ge => ">=",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -103,6 +117,12 @@ impl From<f64> for Rvalue {
 impl From<String> for Rvalue {
     fn from(v: String) -> Self {
         Rvalue::String(v)
+    }
+}
+
+impl From<&'static str> for Rvalue {
+    fn from(v: &'static str) -> Self {
+        Rvalue::String(v.to_string())
     }
 }
 

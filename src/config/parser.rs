@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(IResult::Done(&b""[..], Rvalue::from(123.0)),
                    rvalue(&b"123"[..]));
 
-        assert_eq!(IResult::Done(&b""[..], Rvalue::from("foobar".to_string())),
+        assert_eq!(IResult::Done(&b""[..], Rvalue::from("foobar")),
                    rvalue(&b"'foobar'"[..]));
 
         let sel = Selector::new(vec!["foo".to_string()]);
@@ -418,14 +418,31 @@ mod tests {
 
     #[test]
     fn test_bool_expr_compare() {
-        // TODO: for each compare operator { .. }
-        let expr = BoolExpr::Compare(CompareOperator::Gt,
-                                     Box::new(Rvalue::from(1.0)),
-                                     Box::new(Rvalue::from(0.0)));
-        assert_eq!(IResult::Done(&b""[..], expr),
-                   bool_expr(&b"1 > 0"[..]));
+        use self::CompareOperator::*;
 
         // TODO: test other rvalues
+        for sides in &[("1", "0"),
+                       ("'foo'", "'bar'"),
+                       ("\"foo\"", "\"bar\""),
+                       ("[foo][bar]", "[baz]")] {
+            for pattern in &["{lhs} {op} {rhs}",
+                             "{lhs}{op}{rhs}",
+                             "{lhs} {op}{rhs}",
+                             "{lhs}{op} {rhs}",
+                             "{lhs}   {op}   {rhs}",
+                             "{lhs}\n{op}\n  \n  {rhs}"] {
+                for op in &[Eq, Ne, Gt, Lt, Ge, Le] {
+                    let lhs = rvalue(sides.0.as_bytes()).unwrap().1;
+                    let rhs = rvalue(sides.1.as_bytes()).unwrap().1;
+                    let expr = BoolExpr::Compare(*op, Box::new(lhs), Box::new(rhs));
+                    let config = pattern.replace("{lhs}", sides.0)
+                        .replace("{op}", op.to_string())
+                        .replace("{rhs}", sides.1);
+                    assert_eq!(IResult::Done(&b""[..], expr),
+                               bool_expr(config.as_bytes()));
+                }
+            }
+        }
     }
 
     // TODO:
