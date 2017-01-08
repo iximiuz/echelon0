@@ -9,16 +9,18 @@ use super::ast::*;
 //   end
 //
 //   rule plugin_section
-//     plugin_type _ "{"
-//       _ (branch_or_plugin _)*
-//     "}"
+//     plugin_type _ "{" _ (branch_or_plugin _)* "}"
 //     <LogStash::Config::AST::PluginSection>
 //   end
 //
-//   rule branch_or_plugin
-//     branch / plugin
-//   end
-//
+named!(block<Block>,
+    do_parse!(
+        tag!("{") >>
+        bps: many0!(delimited!(blank0, branch_or_plugin, blank0)) >>
+        tag!("}") >>
+        (bps)
+    )
+);
 
 named!(plugin_type<PluginType>,
     alt!(
@@ -28,20 +30,21 @@ named!(plugin_type<PluginType>,
     )
 );
 
-//   rule plugin
-//     name _ "{"
-//       _
-//       attributes:( attribute (whitespace _ attribute)*)?
-//       _
-//     "}"
-//     <LogStash::Config::AST::Plugin>
-//   end
+named!(branch_or_plugin<BranchOrPlugin>,
+    alt!(
+        branch => { |b| BranchOrPlugin::Branch(b) }
+      | plugin => { |p| BranchOrPlugin::Plugin(p) }
+    )
+);
+
 named!(plugin<Plugin>,
     do_parse!(
         name: name >>
         blank0     >>
         tag!("{")  >>
-        blank0     >>  // TODO: attrs
+        blank0     >>
+// TODO: attributes:( attribute (whitespace _ attribute)*)?
+        blank0     >>
         tag!("}")  >>
         (Plugin::new(name))
     )
@@ -51,25 +54,32 @@ named!(plugin<Plugin>,
 //   if (_ else_if)* (_ else)?
 //   <LogStash::Config::AST::Branch>
 // end
-// named!(branch<Branch>,
-//     do_parse!(
-//         case_if: case_if >>
-//         // TODO: case_else_if: case_else_if >>
-//         // TODO: case_else: case_else >>
-//         (Branch{})
-//     )
-// );
+named!(branch<Branch>,
+    do_parse!(
+        case_if: case_if >>
+        // TODO: case_else_if: case_else_if >>
+        // TODO: case_else: case_else >>
+        (Branch::new())
+    )
+);
 
 // rule if
 //     "if" _ condition _ "{" _ (branch_or_plugin _)* "}"
 //     <LogStash::Config::AST::If>
 // end
-
-// named!(case_if<BranchOrPlugin>,
-// );
+named!(case_if<Case>,
+    do_parse!(
+        tag!("if")   >>
+        blank0       >>
+        c: condition >>
+        blank0       >>
+        b: block     >>
+        (Case::new(c, b))
+    )
+);
 
 // rule else_if
-//   "else" _ "if" _ condition _ "{" _ ( branch_or_plugin _)* "}"
+//   "else" _ "if" _ condition _ "{" _ (branch_or_plugin _)* "}"
 //   <LogStash::Config::AST::Elsif>
 // end
 

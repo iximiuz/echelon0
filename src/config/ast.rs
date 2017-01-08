@@ -17,19 +17,46 @@ pub struct Plugin {
     pub name: String,
 }
 
+pub enum BranchOrPlugin {
+    Branch(Branch),
+    Plugin(Plugin),
+}
+
+pub type Block = Vec<BranchOrPlugin>;
+
 impl Plugin {
     pub fn new(name: String) -> Plugin {
         Plugin { name: name }
     }
 }
 
-pub struct Branch {
 
+/// A branch is essentially a vec of cases `if {...} else if {...} else if {...} else {...}`.
+pub struct Branch {
+    cases: Vec<Case>,
 }
 
-pub enum BranchOrPlugin {
-    Branch(Branch),
-    Plugin(Plugin),
+impl Branch {
+    pub fn new() -> Branch {
+        Branch { cases: vec![] }
+    }
+}
+
+/// Conditional block.
+///
+/// I.e. a condition from `if` or `else if` or `else` statement plus a block.
+pub struct Case {
+    condition: Condition,
+    block: Block,
+}
+
+impl Case {
+    pub fn new(condition: Condition, block: Block) -> Case {
+        Case {
+            condition: condition,
+            block: block,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
