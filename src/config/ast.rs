@@ -12,17 +12,15 @@ pub enum PluginType {
     Output,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Plugin {
-    pub name: String,
-}
-
 pub enum BranchOrPlugin {
     Branch(Branch),
     Plugin(Plugin),
 }
 
-pub type Block = Vec<BranchOrPlugin>;
+#[derive(Debug, PartialEq)]
+pub struct Plugin {
+    pub name: String,
+}
 
 impl Plugin {
     pub fn new(name: String) -> Plugin {
@@ -30,15 +28,23 @@ impl Plugin {
     }
 }
 
-
 /// A branch is essentially a vec of cases `if {...} else if {...} else if {...} else {...}`.
+///
+/// I.e. cases[0] is always `if` statement. And `else` is generalized as `else if (true)` and
+/// always goes as the last one vec element (if exists).
 pub struct Branch {
     cases: Vec<Case>,
 }
 
 impl Branch {
-    pub fn new() -> Branch {
-        Branch { cases: vec![] }
+    pub fn new(case_if: Case, else_ifs: &mut Vec<Case>, case_else: Option<Case>) -> Branch {
+        let cases = Vec::with_capacity(else_ifs.len() + 2);
+        cases.push(case_if);
+        cases.append(else_ifs);
+        if let Some(c) = case_else {
+            cases.push(c);
+        }
+        Branch { cases: cases }
     }
 }
 
@@ -59,49 +65,18 @@ impl Case {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BoolOperator {
-    And,
-    Or,
-}
-
-impl BoolOperator {
-    pub fn precedence(&self) -> i32 {
-        match *self {
-            BoolOperator::Or => 100,
-            BoolOperator::And => 200,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum CompareOperator {
-    Eq,
-    Ne,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-}
-
-impl CompareOperator {
-    pub fn to_string(&self) -> &'static str {
-        use self::CompareOperator::*;
-        match *self {
-            Eq => "==",
-            Ne => "!=",
-            Lt => "<",
-            Gt => ">",
-            Le => "<=",
-            Ge => ">=",
-        }
-    }
-}
+pub type Block = Vec<BranchOrPlugin>;
 
 #[derive(Debug, PartialEq)]
 pub enum Condition {
     Leaf(Box<BoolExpr>),
     Branch(BoolOperator, Box<Condition>, Box<Condition>),
+}
+
+impl Condition {
+    pub fn truth() -> Condition {
+        Condition::Leaf(Box::new(BoolExpr::from(Rvalue::from(1.0))))
+    }
 }
 
 impl From<BoolExpr> for Condition {
@@ -169,5 +144,44 @@ impl From<&'static str> for Rvalue {
 impl From<Selector> for Rvalue {
     fn from(v: Selector) -> Self {
         Rvalue::Selector(v)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BoolOperator {
+    And,
+    Or,
+}
+
+impl BoolOperator {
+    pub fn precedence(&self) -> i32 {
+        match *self {
+            BoolOperator::Or => 100,
+            BoolOperator::And => 200,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CompareOperator {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+impl CompareOperator {
+    pub fn to_string(&self) -> &'static str {
+        use self::CompareOperator::*;
+        match *self {
+            Eq => "==",
+            Ne => "!=",
+            Lt => "<",
+            Gt => ">",
+            Le => "<=",
+            Ge => ">=",
+        }
     }
 }

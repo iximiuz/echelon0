@@ -13,20 +13,21 @@ use super::ast::*;
 //     <LogStash::Config::AST::PluginSection>
 //   end
 //
-named!(block<Block>,
-    do_parse!(
-        tag!("{") >>
-        bps: many0!(delimited!(blank0, branch_or_plugin, blank0)) >>
-        tag!("}") >>
-        (bps)
-    )
-);
 
 named!(plugin_type<PluginType>,
     alt!(
         tag!("input")  => { |_| PluginType::Input  }
       | tag!("filter") => { |_| PluginType::Filter }
       | tag!("output") => { |_| PluginType::Output }
+    )
+);
+
+named!(block<Block>,
+    do_parse!(
+        tag!("{") >>
+        bps: many0!(delimited!(blank0, branch_or_plugin, blank0)) >>
+        tag!("}") >>
+        (bps)
     )
 );
 
@@ -50,23 +51,15 @@ named!(plugin<Plugin>,
     )
 );
 
-// rule branch
-//   if (_ else_if)* (_ else)?
-//   <LogStash::Config::AST::Branch>
-// end
 named!(branch<Branch>,
     do_parse!(
-        case_if: case_if >>
-        // TODO: case_else_if: case_else_if >>
-        // TODO: case_else: case_else >>
-        (Branch::new())
+        case_if:      case_if                             >>
+        else_ifs: many0!(preceded!(blank0, case_else_if)) >>
+        case_else:    opt!(preceded!(blank0, case_else))  >>
+        (Branch::new(case_if, &mut else_ifs.to_vec(), case_else))
     )
 );
 
-// rule if
-//     "if" _ condition _ "{" _ (branch_or_plugin _)* "}"
-//     <LogStash::Config::AST::If>
-// end
 named!(case_if<Case>,
     do_parse!(
         tag!("if")   >>
@@ -78,31 +71,21 @@ named!(case_if<Case>,
     )
 );
 
-// rule else_if
-//   "else" _ "if" _ condition _ "{" _ (branch_or_plugin _)* "}"
-//   <LogStash::Config::AST::Elsif>
-// end
-
-// rule else
-//   "else" _ "{" _ (branch_or_plugin _)* "}"
-//   <LogStash::Config::AST::Else>
-// end
-
-named!(bool_operator<BoolOperator>,
-    alt!(
-        tag!("and")  => { |_| BoolOperator::And }
-      | tag!("or")   => { |_| BoolOperator::Or  }
+named!(case_else_if<Case>,
+    do_parse!(
+        tag!("else")  >>
+        blank0        >>
+        case: case_if >>
+        (case)
     )
 );
 
-named!(compare_operator<CompareOperator>,
-    alt!(
-        tag!("==") => { |_| CompareOperator::Eq }
-      | tag!("!=") => { |_| CompareOperator::Ne }
-      | tag!("<=") => { |_| CompareOperator::Le }
-      | tag!(">=") => { |_| CompareOperator::Ge }
-      | tag!("<")  => { |_| CompareOperator::Lt }
-      | tag!(">")  => { |_| CompareOperator::Gt }
+named!(case_else<Case>,
+    do_parse!(
+        tag!("else") >>
+        blank0       >>
+        b: block     >>
+        (Case::new(Condition::truth(), b))
     )
 );
 
@@ -241,6 +224,24 @@ named!(
 ,
     rvalue_expr<BoolExpr>,
     map!(rvalue, |v| BoolExpr::Rvalue(Box::new(v)))
+);
+
+named!(bool_operator<BoolOperator>,
+    alt!(
+        tag!("and")  => { |_| BoolOperator::And }
+      | tag!("or")   => { |_| BoolOperator::Or  }
+    )
+);
+
+named!(compare_operator<CompareOperator>,
+    alt!(
+        tag!("==") => { |_| CompareOperator::Eq }
+      | tag!("!=") => { |_| CompareOperator::Ne }
+      | tag!("<=") => { |_| CompareOperator::Le }
+      | tag!(">=") => { |_| CompareOperator::Ge }
+      | tag!("<")  => { |_| CompareOperator::Lt }
+      | tag!(">")  => { |_| CompareOperator::Gt }
+    )
 );
 
 named!(
