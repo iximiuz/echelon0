@@ -37,10 +37,10 @@ pub struct Branch {
 }
 
 impl Branch {
-    pub fn new(case_if: Case, else_ifs: &mut Vec<Case>, case_else: Option<Case>) -> Branch {
-        let cases = Vec::with_capacity(else_ifs.len() + 2);
+    pub fn new(case_if: Case, mut else_ifs: Vec<Case>, case_else: Option<Case>) -> Branch {
+        let mut cases = Vec::with_capacity(else_ifs.len() + 2);
         cases.push(case_if);
-        cases.append(else_ifs);
+        cases.append(&mut else_ifs);
         if let Some(c) = case_else {
             cases.push(c);
         }
@@ -65,6 +65,7 @@ impl Case {
     }
 }
 
+/// Block represents statements inside `{ ... }`.
 pub type Block = Vec<BranchOrPlugin>;
 
 #[derive(Debug, PartialEq)]
@@ -75,7 +76,7 @@ pub enum Condition {
 
 impl Condition {
     pub fn truth() -> Condition {
-        Condition::Leaf(Box::new(BoolExpr::from(Rvalue::from(1.0))))
+        Condition::from(BoolExpr::from(Rvalue::from(1.0)))
     }
 }
 
@@ -89,8 +90,8 @@ impl From<BoolExpr> for Condition {
 pub enum BoolExpr {
     Parens(Box<Condition>),
     Negative(Box<BoolExpr>), // TODO: maybe use Condition instead of BoolExpr here?
-    Compare(CompareOperator, Box<Rvalue>, Box<Rvalue>),
-    Rvalue(Box<Rvalue>),
+    Compare(CompareOperator, Rvalue, Rvalue),
+    Rvalue(Rvalue),
 }
 
 impl BoolExpr {
@@ -101,7 +102,7 @@ impl BoolExpr {
 
 impl From<Rvalue> for BoolExpr {
     fn from(v: Rvalue) -> BoolExpr {
-        BoolExpr::Rvalue(Box::new(v))
+        BoolExpr::Rvalue(v)
     }
 }
 

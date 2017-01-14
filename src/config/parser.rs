@@ -4,15 +4,106 @@ use nom::{alphanumeric, is_digit, multispace};
 
 use super::ast::*;
 
-//   rule config
-//     _ plugin_section _ (_ plugin_section)* _ <LogStash::Config::AST::Config>
-//   end
-//
-//   rule plugin_section
-//     plugin_type _ "{" _ (branch_or_plugin _)* "}"
+// rule config
+//   _ plugin_section _ (_ plugin_section)* _ <LogStash::Config::AST::Config>
+// end
+
+// rule plugin_section
+//   plugin_type _ "{" _ (branch_or_plugin _)* "}"
 //     <LogStash::Config::AST::PluginSection>
-//   end
-//
+//  end
+
+// rule attribute
+//   name _ "=>" _ value
+//   <LogStash::Config::AST::Attribute>
+// end
+
+// rule value
+//   plugin / bareword / string / number / array / hash
+// end
+
+// rule array_value
+//   bareword / string / number / array / hash
+// end
+
+// rule bareword
+//   [A-Za-z_] [A-Za-z0-9_]+
+//   <LogStash::Config::AST::Bareword>
+// end
+
+// rule regexp
+//   ( '/' ( '\/' / !'/' . )* '/'  <LogStash::Config::AST::RegExp>)
+// end
+
+// rule array
+//   "["
+//   _
+//   (
+//     value (_ "," _ value)*
+//   )?
+//   _
+//   "]"
+//   <LogStash::Config::AST::Array>
+// end
+
+// rule hash
+//   "{"
+//     _
+//     hashentries?
+//     _
+//   "}"
+//   <LogStash::Config::AST::Hash>
+// end
+
+// rule hashentries
+//   hashentry (whitespace hashentry)*
+//   <LogStash::Config::AST::HashEntries>
+// end
+
+// rule hashentry
+//   name:(number / bareword / string) _ "=>" _ value
+//   <LogStash::Config::AST::HashEntry>
+// end
+
+// rule in_expression
+//   rvalue _ in_operator _ rvalue
+//   <LogStash::Config::AST::InExpression>
+// end
+
+// rule not_in_expression
+//   rvalue _ not_in_operator _ rvalue
+//   <LogStash::Config::AST::NotInExpression>
+// end
+
+// rule in_operator
+//   "in"
+// end
+
+// rule not_in_operator
+//   "not " _ "in"
+// end
+
+// rule method_call
+//     method _ "(" _
+//       (
+//         rvalue ( _ "," _ rvalue )*
+//       )?
+//     _ ")"
+//   <LogStash::Config::AST::MethodCall>
+// end
+
+// rule method
+//   bareword
+// end
+
+// rule regexp_expression
+//   rvalue _  regexp_operator _ (string / regexp)
+//   <LogStash::Config::AST::RegexpExpression>
+// end
+
+// rule regexp_operator
+//   ("=~" / "!~") <LogStash::Config::AST::RegExpOperator>
+// end
 
 named!(plugin_type<PluginType>,
     alt!(
@@ -53,10 +144,10 @@ named!(plugin<Plugin>,
 
 named!(branch<Branch>,
     do_parse!(
-        case_if:      case_if                             >>
-        else_ifs: many0!(preceded!(blank0, case_else_if)) >>
-        case_else:    opt!(preceded!(blank0, case_else))  >>
-        (Branch::new(case_if, &mut else_ifs.to_vec(), case_else))
+        case_if:   case_if                                 >>
+        else_ifs:  many0!(preceded!(blank0, case_else_if)) >>
+        case_else: opt!(preceded!(blank0, case_else))      >>
+        (Branch::new(case_if, else_ifs, case_else))
     )
 );
 
@@ -213,7 +304,7 @@ named!(
         op: compare_operator >>
         opt!(blank0)         >>
         rhs: rvalue          >>
-        (BoolExpr::Compare(op, Box::new(lhs), Box::new(rhs)))
+        (BoolExpr::Compare(op, lhs, rhs))
     )
 );
 
@@ -223,7 +314,7 @@ named!(
 /// Does it use `ruby`'s conversions rules?
 ,
     rvalue_expr<BoolExpr>,
-    map!(rvalue, |v| BoolExpr::Rvalue(Box::new(v)))
+    map!(rvalue, |v| BoolExpr::Rvalue(v))
 );
 
 named!(bool_operator<BoolOperator>,
@@ -549,7 +640,7 @@ mod tests {
                 for op in &[Eq, Ne, Gt, Lt, Ge, Le] {
                     let lhs = rvalue(sides.0.as_bytes()).unwrap().1;
                     let rhs = rvalue(sides.1.as_bytes()).unwrap().1;
-                    let expr = BoolExpr::Compare(*op, Box::new(lhs), Box::new(rhs));
+                    let expr = BoolExpr::Compare(*op, lhs, rhs);
                     let config = pattern.replace("{lhs}", sides.0)
                         .replace("{op}", op.to_string())
                         .replace("{rhs}", sides.1);
@@ -569,8 +660,8 @@ mod tests {
                     Condition::from(
                         BoolExpr::Compare(
                             CompareOperator::Gt,
-                            Box::new(Rvalue::from(1.0)),
-                            Box::new(Rvalue::from(2.0))
+                            Rvalue::from(1.0),
+                            Rvalue::from(2.0)
                         )
                     )
                 )
@@ -588,8 +679,8 @@ mod tests {
                     Condition::from(
                         BoolExpr::Compare(
                             CompareOperator::Gt,
-                            Box::new(Rvalue::from(1.0)),
-                            Box::new(Rvalue::from(2.0))
+                            Rvalue::from(1.0),
+                            Rvalue::from(2.0)
                         )
                     )
                 )
