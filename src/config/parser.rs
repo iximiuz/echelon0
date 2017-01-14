@@ -4,15 +4,6 @@ use nom::{alphanumeric, is_digit, multispace};
 
 use super::ast::*;
 
-// rule config
-//   _ plugin_section _ (_ plugin_section)* _ <LogStash::Config::AST::Config>
-// end
-
-// rule plugin_section
-//   plugin_type _ "{" _ (branch_or_plugin _)* "}"
-//     <LogStash::Config::AST::PluginSection>
-//  end
-
 // rule attribute
 //   name _ "=>" _ value
 //   <LogStash::Config::AST::Attribute>
@@ -105,6 +96,23 @@ use super::ast::*;
 //   ("=~" / "!~") <LogStash::Config::AST::RegExpOperator>
 // end
 
+named!(
+/// Entry point to parse the configuration.
+,
+    config<Config>,
+    map!(many0!(delimited!(blank0, plugin_section, blank0)),
+        |sections| Config::new(sections) )
+);
+
+named!(plugin_section<PluginSection>,
+    do_parse!(
+        ptype: plugin_type >>
+        blank0             >>
+        block: block       >>
+        (PluginSection::new(ptype, block))
+    )
+);
+
 named!(plugin_type<PluginType>,
     alt!(
         tag!("input")  => { |_| PluginType::Input  }
@@ -113,7 +121,13 @@ named!(plugin_type<PluginType>,
     )
 );
 
-named!(block<Block>,
+named!(
+/// Parses code block.
+///
+/// I.e. zero or more statements inside `{ ... }`.
+/// Logstash rule: `"{" _ (branch_or_plugin _)* "}"`.
+,
+    block<Block>,
     do_parse!(
         tag!("{") >>
         bps: many0!(delimited!(blank0, branch_or_plugin, blank0)) >>
@@ -655,17 +669,9 @@ mod tests {
     fn test_bool_expr_parens() {
         // TODO: add test cases.
         let expr =
-            BoolExpr::Parens(
-                Box::new(
-                    Condition::from(
-                        BoolExpr::Compare(
-                            CompareOperator::Gt,
-                            Rvalue::from(1.0),
-                            Rvalue::from(2.0)
-                        )
-                    )
-                )
-            );
+            BoolExpr::Parens(Box::new(Condition::from(BoolExpr::Compare(CompareOperator::Gt,
+                                                                        Rvalue::from(1.0),
+                                                                        Rvalue::from(2.0)))));
         assert_eq!(IResult::Done(&b""[..], expr),
                    bool_expr(&b"(1 > 2)"[..]));
     }
@@ -674,17 +680,10 @@ mod tests {
     fn test_bool_expr_negative() {
         // not (some parens expr or condition)
         let expr =
-            BoolExpr::Parens(
-                Box::new(
-                    Condition::from(
-                        BoolExpr::Compare(
-                            CompareOperator::Gt,
-                            Rvalue::from(1.0),
-                            Rvalue::from(2.0)
-                        )
-                    )
-                )
-            ).not();
+            BoolExpr::Parens(Box::new(Condition::from(BoolExpr::Compare(CompareOperator::Gt,
+                                                                        Rvalue::from(1.0),
+                                                                        Rvalue::from(2.0)))))
+                .not();
         assert_eq!(IResult::Done(&b""[..], expr),
                    bool_expr(&b"!(1 > 2)"[..]));
 

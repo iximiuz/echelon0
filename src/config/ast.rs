@@ -1,10 +1,26 @@
-// pub struct Config {
-//     sections: Vec<PluginSection>,
-// }
+pub struct Config {
+    sections: Vec<PluginSection>,
+}
 
-// pub struct PluginSection {
-// 	plugin_type: String,
-// }
+impl Config {
+    pub fn new(sections: Vec<PluginSection>) -> Config {
+        Config { sections: sections }
+    }
+}
+
+pub struct PluginSection {
+    plugin_type: PluginType,
+    block: Block,
+}
+
+impl PluginSection {
+    pub fn new(plugin_type: PluginType, block: Block) -> PluginSection {
+        PluginSection {
+            plugin_type: plugin_type,
+            block: block,
+        }
+    }
+}
 
 pub enum PluginType {
     Input,
