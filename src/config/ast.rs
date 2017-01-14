@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq)]
 pub struct Config {
     sections: Vec<PluginSection>,
 }
@@ -8,6 +9,7 @@ impl Config {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct PluginSection {
     plugin_type: PluginType,
     block: Block,
@@ -22,12 +24,14 @@ impl PluginSection {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum PluginType {
     Input,
     Filter,
     Output,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum BranchOrPlugin {
     Branch(Branch),
     Plugin(Plugin),
@@ -48,6 +52,7 @@ impl Plugin {
 ///
 /// I.e. cases[0] is always `if` statement. And `else` is generalized as `else if (true)` and
 /// always goes as the last one vec element (if exists).
+#[derive(Debug, PartialEq)]
 pub struct Branch {
     cases: Vec<Case>,
 }
@@ -67,6 +72,7 @@ impl Branch {
 /// Conditional block.
 ///
 /// I.e. a condition from `if` or `else if` or `else` statement plus a block.
+#[derive(Debug, PartialEq)]
 pub struct Case {
     condition: Condition,
     block: Block,

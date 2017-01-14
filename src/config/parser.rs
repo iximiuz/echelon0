@@ -100,7 +100,7 @@ named!(
 /// Entry point to parse the configuration.
 ,
     config<Config>,
-    map!(many0!(delimited!(blank0, plugin_section, blank0)),
+    map!(many1!(delimited!(blank0, plugin_section, blank0)),
         |sections| Config::new(sections) )
 );
 
@@ -130,6 +130,7 @@ named!(
     block<Block>,
     do_parse!(
         tag!("{") >>
+        blank0    >>
         bps: many0!(delimited!(blank0, branch_or_plugin, blank0)) >>
         tag!("}") >>
         (bps)
@@ -485,6 +486,27 @@ mod tests {
     use nom::{IResult, ErrorKind};
 
     #[test]
+    fn test_config() {
+        let conf = include_bytes!("./tests/assets/simplest.conf");
+        let expected = Config::new(vec![
+            PluginSection::new(PluginType::Input, vec![
+                BranchOrPlugin::Plugin(Plugin::new("stdin".to_string())),
+                BranchOrPlugin::Plugin(Plugin::new("file".to_string()))
+            ]),
+            PluginSection::new(PluginType::Filter, vec![]),
+            PluginSection::new(PluginType::Filter, vec![]),
+            PluginSection::new(PluginType::Filter, vec![]),
+            PluginSection::new(PluginType::Filter, vec![]),
+            PluginSection::new(PluginType::Filter, vec![]),
+            PluginSection::new(PluginType::Output, vec![
+                BranchOrPlugin::Plugin(Plugin::new("stdout".to_string()))
+            ]),
+        ]);
+
+        assert_eq!(IResult::Done(&b""[..], expected), config(conf));
+    }
+
+    #[test]
     fn test_plugin() {
         let config = &b"stdin {}"[..];
         assert_eq!(IResult::Done(&b""[..], Plugin::new("stdin".to_string())),
@@ -694,13 +716,13 @@ mod tests {
 
     #[test]
     fn test_parse_blank0() {
-        let config = include_bytes!("../../tests/assets/config/comments.conf");
+        let config = include_bytes!("./tests/assets/comments.conf");
         assert_eq!(IResult::Done(&b"input {}"[..], &b""[..]), blank0(config));
     }
 
     #[test]
     fn test_parse_comments() {
-        let config = include_bytes!("../../tests/assets/config/comments.conf");
+        let config = include_bytes!("./tests/assets/comments.conf");
         assert_eq!(IResult::Done(&b"input {}"[..], &b""[..]), comments(config));
     }
 }
