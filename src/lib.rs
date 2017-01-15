@@ -6,19 +6,10 @@ extern crate regex;
 // extern crate serde;
 // extern crate serde_json;
 
-mod macros;
+pub use runner::*;
+
 mod config;
-
-pub struct Runner {
-
-}
-
-impl Runner {
-    pub fn new() -> Runner {
-        Runner {}
-    }
-
-    pub fn run(&self) {
-        println!("Hello from Echelon0 runner!");
-    }
-}
+mod macros;
+mod pipeline;
+mod plugin;
+mod runner;

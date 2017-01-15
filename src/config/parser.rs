@@ -1,6 +1,6 @@
 use std::str;
 
-use nom::{alphanumeric, is_digit, multispace};
+use nom::{alphanumeric, is_digit, multispace, IResult};
 
 use super::ast::*;
 
@@ -95,6 +95,17 @@ use super::ast::*;
 // rule regexp_operator
 //   ("=~" / "!~") <LogStash::Config::AST::RegExpOperator>
 // end
+
+#[inline]
+pub fn parse(conf: &[u8]) -> Result<Config, String> {
+    match config(conf) {
+        IResult::Done(_, c) => Ok(c),
+        _ => {
+            // TODO: improve error report
+            Err("Config parsing failed".to_string())
+        }
+    }
+}
 
 named!(
 /// Entry point to parse the configuration.
