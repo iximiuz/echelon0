@@ -1,3 +1,5 @@
 pub mod ast;
-pub mod parser;
-pub mod compiler;
+pub mod parse;
+pub mod compile;
+
+mod visit;

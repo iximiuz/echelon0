@@ -112,7 +112,7 @@ named!(
 ,
     config<Config>,
     map!(many1!(delimited!(blank0, plugin_section, blank0)),
-        |sections| Config::new(sections) )
+        |sections| Config { sections: sections } )
 );
 
 named!(plugin_section<PluginSection>,
@@ -120,7 +120,7 @@ named!(plugin_section<PluginSection>,
         ptype: plugin_type >>
         blank0             >>
         block: block       >>
-        (PluginSection::new(ptype, block))
+        (PluginSection { plugin_type: ptype, block: block })
     )
 );
 
@@ -164,7 +164,7 @@ named!(plugin<Plugin>,
 // TODO: attributes:( attribute (whitespace _ attribute)*)?
         blank0     >>
         tag!("}")  >>
-        (Plugin::new(name))
+        (Plugin { name: name })
     )
 );
 
@@ -184,7 +184,7 @@ named!(case_if<Case>,
         c: condition >>
         blank0       >>
         b: block     >>
-        (Case::new(c, b))
+        (Case { condition: c, block: b })
     )
 );
 
@@ -202,7 +202,7 @@ named!(case_else<Case>,
         tag!("else") >>
         blank0       >>
         b: block     >>
-        (Case::new(Condition::truth(), b))
+        (Case { condition: Condition::truth(), block: b })
     )
 );
 
@@ -470,7 +470,7 @@ named!(selector<Selector>,
                 str::from_utf8
             )
         ),
-        { |elems: Vec<&str>| Selector::new(elems.iter().map(|e| e.to_string()).collect()) }
+        { |elems: Vec<&str>| Selector { elements: elems.iter().map(|e| e.to_string()).collect() } }
     )
 );
 
@@ -499,20 +499,28 @@ mod tests {
     #[test]
     fn test_config() {
         let conf = include_bytes!("./tests/assets/simplest.conf");
-        let expected = Config::new(vec![
-            PluginSection::new(PluginType::Input, vec![
-                BranchOrPlugin::Plugin(Plugin::new("stdin".to_string())),
-                BranchOrPlugin::Plugin(Plugin::new("file".to_string()))
-            ]),
-            PluginSection::new(PluginType::Filter, vec![]),
-            PluginSection::new(PluginType::Filter, vec![]),
-            PluginSection::new(PluginType::Filter, vec![]),
-            PluginSection::new(PluginType::Filter, vec![]),
-            PluginSection::new(PluginType::Filter, vec![]),
-            PluginSection::new(PluginType::Output, vec![
-                BranchOrPlugin::Plugin(Plugin::new("stdout".to_string()))
-            ]),
-        ]);
+        let expected = Config {
+            sections: vec![
+                PluginSection {
+                    plugin_type: PluginType::Input,
+                    block: vec![
+                        BranchOrPlugin::Plugin(Plugin { name: "stdin".to_string() }),
+                        BranchOrPlugin::Plugin(Plugin { name: "file".to_string() })
+                    ]
+                },
+                PluginSection { plugin_type: PluginType::Filter, block: vec![] },
+                PluginSection { plugin_type: PluginType::Filter, block: vec![] },
+                PluginSection { plugin_type: PluginType::Filter, block: vec![] },
+                PluginSection { plugin_type: PluginType::Filter, block: vec![] },
+                PluginSection { plugin_type: PluginType::Filter, block: vec![] },
+                PluginSection {
+                    plugin_type: PluginType::Output,
+                    block: vec![
+                        BranchOrPlugin::Plugin(Plugin { name: "stdout".to_string() })
+                    ],
+                }
+            ],
+        };
 
         assert_eq!(IResult::Done(&b""[..], expected), config(conf));
     }
@@ -520,11 +528,11 @@ mod tests {
     #[test]
     fn test_plugin() {
         let config = &b"stdin {}"[..];
-        assert_eq!(IResult::Done(&b""[..], Plugin::new("stdin".to_string())),
+        assert_eq!(IResult::Done(&b""[..], Plugin { name: "stdin".to_string() }),
                    plugin(config));
 
         let config = &b"file {\n\n    \n}"[..];
-        assert_eq!(IResult::Done(&b""[..], Plugin::new("file".to_string())),
+        assert_eq!(IResult::Done(&b""[..], Plugin { name: "file".to_string() }),
                    plugin(config));
     }
 
@@ -536,11 +544,11 @@ mod tests {
         assert_eq!(IResult::Done(&b""[..], Rvalue::from("foobar")),
                    rvalue(&b"'foobar'"[..]));
 
-        let sel = Selector::new(vec!["foo".to_string()]);
+        let sel = Selector { elements: vec!["foo".to_string()] };
         assert_eq!(IResult::Done(&b""[..], Rvalue::from(sel)),
                    rvalue(&b"[foo]"[..]));
 
-        let sel = Selector::new(vec!["foo".to_string(), "bar".to_string()]);
+        let sel = Selector { elements: vec!["foo".to_string(), "bar".to_string()] };
         assert_eq!(IResult::Done(&b""[..], Rvalue::from(sel)),
                    rvalue(&b"[foo][bar]"[..]));
 

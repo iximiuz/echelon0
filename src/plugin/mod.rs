@@ -1,7 +1,7 @@
-pub use plugin::input::*;
-pub use plugin::filter::*;
-pub use plugin::output::*;
-pub use plugin::factory::*;
+pub use self::input::*;
+pub use self::filter::*;
+pub use self::output::*;
+pub use self::factory::*;
 
 mod factory;
 mod input;

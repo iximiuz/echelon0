@@ -1,27 +1,12 @@
 #[derive(Debug, PartialEq)]
 pub struct Config {
-    sections: Vec<PluginSection>,
-}
-
-impl Config {
-    pub fn new(sections: Vec<PluginSection>) -> Config {
-        Config { sections: sections }
-    }
+    pub sections: Vec<PluginSection>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct PluginSection {
-    plugin_type: PluginType,
-    block: Block,
-}
-
-impl PluginSection {
-    pub fn new(plugin_type: PluginType, block: Block) -> PluginSection {
-        PluginSection {
-            plugin_type: plugin_type,
-            block: block,
-        }
-    }
+    pub plugin_type: PluginType,
+    pub block: Block,
 }
 
 #[derive(Debug, PartialEq)]
@@ -30,6 +15,9 @@ pub enum PluginType {
     Filter,
     Output,
 }
+
+/// Block represents statements inside `{ ... }`.
+pub type Block = Vec<BranchOrPlugin>;
 
 #[derive(Debug, PartialEq)]
 pub enum BranchOrPlugin {
@@ -42,19 +30,13 @@ pub struct Plugin {
     pub name: String,
 }
 
-impl Plugin {
-    pub fn new(name: String) -> Plugin {
-        Plugin { name: name }
-    }
-}
-
 /// A branch is essentially a vec of cases `if {...} else if {...} else if {...} else {...}`.
 ///
 /// I.e. cases[0] is always `if` statement. And `else` is generalized as `else if (true)` and
 /// always goes as the last one vec element (if exists).
 #[derive(Debug, PartialEq)]
 pub struct Branch {
-    cases: Vec<Case>,
+    pub cases: Vec<Case>,
 }
 
 impl Branch {
@@ -74,21 +56,9 @@ impl Branch {
 /// I.e. a condition from `if` or `else if` or `else` statement plus a block.
 #[derive(Debug, PartialEq)]
 pub struct Case {
-    condition: Condition,
-    block: Block,
+    pub condition: Condition,
+    pub block: Block,
 }
-
-impl Case {
-    pub fn new(condition: Condition, block: Block) -> Case {
-        Case {
-            condition: condition,
-            block: block,
-        }
-    }
-}
-
-/// Block represents statements inside `{ ... }`.
-pub type Block = Vec<BranchOrPlugin>;
 
 #[derive(Debug, PartialEq)]
 pub enum Condition {
@@ -130,13 +100,7 @@ impl From<Rvalue> for BoolExpr {
 
 #[derive(Debug, PartialEq)]
 pub struct Selector {
-    elements: Vec<String>,
-}
-
-impl Selector {
-    pub fn new(elements: Vec<String>) -> Selector {
-        Selector { elements: elements }
-    }
+    pub elements: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]

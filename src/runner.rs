@@ -1,5 +1,5 @@
-use config::compiler::Compiler;
-use config::parser;
+use config::compile::compile;
+use config::parse::parse;
 use pipeline::Pipeline;
 use plugin::PluginFactory;
 
@@ -10,15 +10,10 @@ pub struct Runner {
 
 impl Runner {
     pub fn new() -> Runner {
-        let compiler = Compiler::new(
-            parser::parse(include_bytes!("./config/tests/assets/simplest.conf")).unwrap(),
-            PluginFactory::new(),
-        );
-        let pipeline = Pipeline::new(
-            compiler.generate_inputs(),
-            compiler.generate_filters(),
-            compiler.generate_outputs(),
-        );
+        let config = parse(include_bytes!("./config/tests/assets/simplest.conf")).unwrap();
+        let plugin_factory = PluginFactory::new();
+        let session = compile(&config, plugin_factory);
+        let pipeline = Pipeline::new(session.inputs, session.filters, session.outputs);
         Runner { pipeline: pipeline }
     }
 
