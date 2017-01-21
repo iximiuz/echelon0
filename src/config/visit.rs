@@ -6,15 +6,15 @@ pub trait Visitor<'ast>: Sized {
     }
 
     fn visit_input_block(&mut self, block: &'ast Block) {
-        walk_block!("input", self, block)
+        walk_input_block(self, block)
     }
 
-    fn visit_filter_block(&mut self, section: &'ast Block) {
-        walk_block!("filter", self, block)
+    fn visit_filter_block(&mut self, block: &'ast Block) {
+        walk_filter_block(self, block)
     }
 
-    fn visit_output_block(&mut self, section: &'ast Block) {
-        walk_block!("output", self, block)
+    fn visit_output_block(&mut self, block: &'ast Block) {
+        walk_output_block(self, block)
     }
 
     fn visit_input_plugin(&mut self, plugin: &'ast Plugin) {
@@ -57,11 +57,25 @@ pub fn walk_plugin_section<'a, V: Visitor<'a>>(visitor: &mut V, section: &'a Plu
     }
 }
 
-pub fn walk_block<'a, V: Visitor<'a>>(visitor: &mut V, block: &'a Block) {
-    for branch_or_plugin in block {
-        match branch_or_plugin {
-            BranchOrPlugin::Plugin(p) => visitor.visit_plugin(&p),
-            BranchOrPlugin::Branch(b) => visitor.visit_plugin(&b),
+macro_rules! walk_block {
+    ($visitor: expr, $visit_plugin_method: ident, $visit_branch_method: ident, $block: expr) => {
+        for branch_or_plugin in $block {
+            match *branch_or_plugin {
+                BranchOrPlugin::Plugin(ref p) => $visitor.$visit_plugin_method(p),
+                BranchOrPlugin::Branch(ref b) => $visitor.$visit_branch_method(b),
+            }
         }
-    }
+    };
+}
+
+pub fn walk_input_block<'a, V: Visitor<'a>>(visitor: &mut V, block: &'a Block) {
+    walk_block!(visitor, visit_input_plugin, visit_input_branch, block)
+}
+
+pub fn walk_filter_block<'a, V: Visitor<'a>>(visitor: &mut V, block: &'a Block) {
+    walk_block!(visitor, visit_filter_plugin, visit_filter_branch, block)
+}
+
+pub fn walk_output_block<'a, V: Visitor<'a>>(visitor: &mut V, block: &'a Block) {
+    walk_block!(visitor, visit_output_plugin, visit_output_branch, block)
 }

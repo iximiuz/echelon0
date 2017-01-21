@@ -1,3 +1,5 @@
+use super::input::InputPlugin;
+
 pub struct PluginFactory {
 
 }
@@ -7,7 +9,7 @@ impl PluginFactory {
         PluginFactory {}
     }
 
-    // pub fn create_input() -> Input {
-    //     Input {}
-    // }
+    pub fn create_input(&self, name: &str) -> InputPlugin {
+        InputPlugin {}
+    }
 }
