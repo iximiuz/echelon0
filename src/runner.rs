@@ -12,7 +12,7 @@ impl Runner {
     pub fn new() -> Runner {
         let config = parse(include_bytes!("./config/tests/assets/simplest.conf")).unwrap();
         let plugin_factory = PluginFactory::new();
-        let session = compile(&config, plugin_factory);
+        let session = compile(&config, &plugin_factory);
         let pipeline = Pipeline::new(session.inputs, session.filters, session.outputs);
         Runner { pipeline: pipeline }
     }

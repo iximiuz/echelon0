@@ -13,3 +13,11 @@ impl InputSection {
         self.inputs.push(input);
     }
 }
+
+impl Iterator for InputSection {
+    type Item = InputPlugin;
+
+    fn next(&mut self) -> Option<InputPlugin> {
+        self.inputs.pop()
+    }
+}
