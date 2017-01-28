@@ -1,7 +1,7 @@
 use config::compile::compile;
 use config::parse::parse;
 use pipeline::Pipeline;
-use plugin::PluginFactory;
+use plugin::factory::PluginFactory;
 
 /// Handles program runs (i.e. parses command line params and dispatches executors).
 pub struct Runner {

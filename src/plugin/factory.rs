@@ -1,11 +1,15 @@
 use super::input::InputPlugin;
 
 pub enum Error {
-    PluginNotFound
+    PluginNotFound,
 }
 
+// TODO: impl From and std::error::Error for Error
+
+pub type Result<T> = ::std::result::Result<T, Error>;
+
 pub trait PluginProvider {
-    fn create_input(&self, name: &str) -> Result<InputPlugin, Error>;
+    fn create_input(&self, name: &str) -> Result<InputPlugin>;
 }
 
 pub struct PluginFactory {
@@ -19,7 +23,7 @@ impl PluginFactory {
 }
 
 impl PluginProvider for PluginFactory {
-    fn create_input(&self, name: &str) -> Result<InputPlugin, Error> {
+    fn create_input(&self, name: &str) -> Result<InputPlugin> {
         Ok(InputPlugin {})
     }
 }
