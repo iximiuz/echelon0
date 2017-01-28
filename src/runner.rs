@@ -17,7 +17,8 @@ impl Runner {
         Runner { pipeline: pipeline }
     }
 
-    pub fn run(&self) {
+    pub fn run(&mut self) {
         println!("Hello from Echelon0 runner!");
+        self.pipeline.run();
     }
 }

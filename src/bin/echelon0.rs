@@ -77,6 +77,6 @@ fn main() {
     //     echelon0.set_exclude_filter(exclude).expect("Cannot set exclude filter");
     // }
 
-    let runner = Runner::new();
+    let mut runner = Runner::new();
     runner.run();
 }

@@ -1,5 +1,6 @@
 pub struct InputPlugin {
-    // config_name = "input"
+
+    // config_name = "input"  Read it from plugin impl
     // type: String
     // codec
     // tags = []
@@ -28,4 +29,24 @@ pub struct InputPlugin {
     // id()
     // do_close()
     // close()
+}
+
+impl Clone for InputPlugin {
+    fn clone(&self) -> InputPlugin {
+        InputPlugin {}
+    }
+}
+
+impl InputPlugin {
+    pub fn register(&mut self) {
+
+    }
+
+    pub fn run(&mut self) {
+
+    }
+
+    pub fn threads_count(&self) -> usize {
+        1  // TODO: read it from the plugin impl
+    }
 }
