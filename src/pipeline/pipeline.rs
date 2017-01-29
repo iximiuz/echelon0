@@ -16,6 +16,7 @@ impl Pipeline {
     }
 
     pub fn run(&mut self) {
+        // Starts all the extra threads and waits them too.
         self.start_workers()
     }
 

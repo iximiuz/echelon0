@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct InputPlugin {
 
     // config_name = "input"  Read it from plugin impl

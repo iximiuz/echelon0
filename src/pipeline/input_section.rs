@@ -27,7 +27,8 @@ impl InputSection {
             }
         }
 
-        for input in &mut self.inputs {
+        self.inputs.append(&mut extra_inputs);
+        while let Some(mut input) = self.inputs.pop() {
             input.register();
             // TODO: set thread name to "[#{pipeline_id}]<#{plugin.class.config_name}"
             self.workers.push(thread::Builder::new()
@@ -37,23 +38,27 @@ impl InputSection {
                     w.run();
                 }).expect("Cannot start Input worker"));
         }
-        for input in &mut extra_inputs {
-            input.register();
-        }
     }
 
-    pub fn wait(&self) {
-        for w in self.workers {
-            w.join();
+    pub fn wait(&mut self) {
+        while let Some(w) = self.workers.pop() {
+            match w.join() {
+                Err(e) => {
+                    // TODO: log
+                }
+                _ => {},
+            }
         }
     }
 }
 
-struct InputWorker<'a> {
-    input: &'a InputPlugin,
+// TODO: impl Drop for InputSection
+
+struct InputWorker {
+    input: InputPlugin,
 }
 
-impl<'a> InputWorker<'a> {
+impl InputWorker {
     pub fn run(&mut self) {
         self.input.run();
     }
