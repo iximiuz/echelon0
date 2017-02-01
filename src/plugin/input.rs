@@ -44,7 +44,7 @@ impl InputPlugin {
     }
 
     pub fn run(&mut self) {
-
+        ::std::thread::sleep(::std::time::Duration::from_millis(10000));
     }
 
     pub fn threads_count(&self) -> usize {
